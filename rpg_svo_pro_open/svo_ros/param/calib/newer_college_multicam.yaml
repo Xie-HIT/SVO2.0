@@ -1,0 +1,114 @@
+label: "Newer_College"
+cameras:
+- camera:
+    label: cam0
+    image_height: 540
+    image_width: 720
+    type: pinhole
+    intrinsics:
+      cols: 1
+      rows: 4
+      data: [352.779, 354.609, 359.035, 260.546]
+    distortion:
+      type: equidistant   
+      parameters:
+        cols: 1
+        rows: 4 
+        data: [-0.04217, -0.00413, 0.00179, -0.00063]
+  T_B_C:
+    cols: 4
+    rows: 4
+    data: [0.00343916, -0.00100545, 0.99999358, 0.04922168,
+           0.99997599, 0.00601977, -0.00343304, 0.04723672,
+          -0.00601628, 0.99998138, 0.00102613, -0.00939957,
+           0.0, 0.0, 0.0, 1.0]
+- camera:
+    label: cam1
+    image_height: 540
+    image_width: 720
+    type: pinhole
+    intrinsics:
+      cols: 1
+      rows: 4
+      data: [352.538, 354.508, 363.856, 287.494]
+    distortion:
+      type: equidistant   
+      parameters:
+        cols: 1
+        rows: 4 
+        data: [-0.04314, 0.00100, -0.00286, 0.00069]
+  T_B_C:
+    cols: 4
+    rows: 4
+    data: [0.01073605, -0.00030381, 0.99994232, 0.0484698,
+           0.99993828, -0.00285536, -0.01073687, -0.06343414,
+           0.00285846, 0.99999588, 0.00027314, -0.00993133,
+           0.0, 0.0, 0.0, 1.0]
+- camera:
+    label: cam3
+    image_height: 540
+    image_width: 720
+    type: pinhole
+    intrinsics:
+      cols: 1
+      rows: 4
+      data: [353.4771977455599, 352.49309892170646, 359.3820102818009, 246.0762257814033]
+    distortion:
+      type: equidistant   
+      parameters:
+        cols: 1
+        rows: 4 
+        data: [-0.03932015398330179, -0.004740697084133104, 0.0015352229232181549, -0.0004047224742092007]
+  T_B_C:
+    cols: 4
+    rows: 4
+    data: [-0.99997431, 0.00568413, 0.00436591, -0.0087409,
+           0.00431883, -0.00826834, 0.99995649, 0.05844016,
+           0.00571998, 0.99994966, 0.00824358, -0.00868016,
+           0.0, 0.0, 0.0, 1.0]
+- camera:
+    label: cam4
+    image_height: 540
+    image_width: 720
+    type: pinhole
+    intrinsics:
+      cols: 1
+      rows: 4
+      data: [351.3873118634877, 350.7642336259401, 342.7571148078969, 287.284844843618]
+    distortion:
+      type: equidistant   
+      parameters:
+        cols: 1
+        rows: 4 
+        data: [-0.03691139827164534, -0.008792737141233907, 0.005972994670065676, -0.0019218526270038702]
+  T_B_C:
+    cols: 4
+    rows: 4
+    data: [0.99996102, 0.00491142, -0.00733712, -0.00700458,
+           -0.007327, -0.00207514, -0.999971, -0.07162565,
+          -0.0049265, 0.99998579, -0.00203907, -0.01111942,
+           0.0, 0.0, 0.0, 1.0]
+
+# RealSense embedded: Bosch BMI055  
+# SevenSense AlphaSense Development Kit multi-camera with embedded IMU: Bosch BMI085 (do not provide) 
+# we use typical value: https://www.bosch-sensortec.com/products/motion-sensors/imus/bmi085/#technical
+imu_params:
+  delay_imu_cam: 0.0
+  max_imu_delta_t: 0.01
+  acc_max: 176.0
+  omega_max: 34.0
+  sigma_omega_c: 0.00025
+  sigma_acc_c: 0.0012
+  sigma_omega_bias_c: 0.02
+  sigma_acc_bias_c: 0.000106
+  sigma_integration: 0.0
+  g: 9.805
+  imu_rate: 200
+
+imu_initialization:
+  velocity: [0.0, 0, 0.0]
+  omega_bias: [0.0, 0, 0.0]
+  acc_bias: [0.0, 0.0, 0.0]
+  velocity_sigma: 2.0
+  omega_bias_sigma: 0.01
+  acc_bias_sigma: 0.1
