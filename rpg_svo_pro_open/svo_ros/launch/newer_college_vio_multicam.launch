@@ -2,16 +2,16 @@
 <!-- Xie Chen, 2022/02/15 -->
 <launch>
 
-  <!-- calibration params -->  
+  <!-- calibration params: use stereo file to simulate 2 cameras -->  
   <arg name="calib_file" default="$(find svo_ros)/param/calib/newer_college_multicam.yaml"/>
 
   <!-- SVO node -->
   <node pkg="svo_ros" type="svo_node" name="svo" clear_params="true" output="screen" args="--v=0" >
 
-    <!-- Suppose we have 4 cameras -->
+    <!-- Suppose we have 6 cameras, because SVO treats them independently -->
     <param name="cam0_topic" value="/alphasense_driver_ros/cam0" type="str" />
     <param name="cam1_topic" value="/alphasense_driver_ros/cam1" type="str" />
-    <param name="cam2_topic" value="/alphasense_driver_ros/cam3" type="str" />
+	  <param name="cam2_topic" value="/alphasense_driver_ros/cam3" type="str" />
     <param name="cam3_topic" value="/alphasense_driver_ros/cam4" type="str" />
 
     <!-- Imu topic to subscribe to -->
@@ -23,18 +23,17 @@
     <!--Parameters-->
     <rosparam file="$(find svo_ros)/param/vio_mono.yaml" />
     <param name="runlc" value="true" /> <!--Loop Closing-->
-    <param name="multi_cam" value="false" />  <!--Whether to use multi-cameras-->
-    <param name="use_ExactPolicy" value="true" />  <!--use ExactPolicy or ApproximatePolicy-->
+    <param name="multi_cam" value="true" />  <!--Whether to use multi-cameras-->
 
   </node>
 
   <!-- convert sensor_msgs/CompressedImage to sensor_msgs/Image  -->
   <node name="image_transport0" pkg="image_transport" type="republish" args="compressed in:=/alphasense_driver_ros/cam0 raw out:=/alphasense_driver_ros/cam0" />
   <node name="image_transport1" pkg="image_transport" type="republish" args="compressed in:=/alphasense_driver_ros/cam1 raw out:=/alphasense_driver_ros/cam1" />
-  <node name="image_transport3" pkg="image_transport" type="republish" args="compressed in:=/alphasense_driver_ros/cam3 raw out:=/alphasense_driver_ros/cam3" />
-  <node name="image_transport4" pkg="image_transport" type="republish" args="compressed in:=/alphasense_driver_ros/cam4 raw out:=/alphasense_driver_ros/cam4" />
-
+  <node name="image_transport2" pkg="image_transport" type="republish" args="compressed in:=/alphasense_driver_ros/cam3 raw out:=/alphasense_driver_ros/cam3" />
+  <node name="image_transport3" pkg="image_transport" type="republish" args="compressed in:=/alphasense_driver_ros/cam4 raw out:=/alphasense_driver_ros/cam4" />
+  
   <!-- RVIZ default config: rviz_config_vio.rviz  -->
-  <node name="vis" pkg="rviz" type="rviz" args=" -d $(find svo_ros)/rviz_config_mono_newer_college_multicam.rviz" />
+  <!-- <node name="vis" pkg="rviz" type="rviz" args=" -d $(find svo_ros)/rviz_config_mono_m2dgr_multicam.rviz" /> -->
 
 </launch>
