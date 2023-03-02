@@ -34,6 +34,6 @@
   <node name="image_transport3" pkg="image_transport" type="republish" args="compressed in:=/alphasense_driver_ros/cam4 raw out:=/alphasense_driver_ros/cam4" />
   
   <!-- RVIZ default config: rviz_config_vio.rviz  -->
-  <!-- <node name="vis" pkg="rviz" type="rviz" args=" -d $(find svo_ros)/rviz_config_mono_m2dgr_multicam.rviz" /> -->
+  <node name="vis" pkg="rviz" type="rviz" args=" -d $(find svo_ros)/rviz_config_mono_newer_college_multicam.rviz" />
 
 </launch>

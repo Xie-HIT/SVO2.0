@@ -26,6 +26,7 @@ public:
   std::vector<PointPtr> points_to_delete_;
   std::mutex points_to_delete_mutex_;
   int last_added_kf_id_;
+  int last_added_kf_bundle_id_;
   std::deque<int> sorted_keyframe_ids_; //!< Used with ceres backend
 
   // cache the last removed keyframe for use of other modules

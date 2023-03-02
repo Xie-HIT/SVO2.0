@@ -77,8 +77,8 @@ UpdateResult FrameHandlerStereo::processFirstFrame()
   map_->addKeyframe(new_frames_->at(1),
                     bundle_adjustment_type_==BundleAdjustmentType::kCeres);
 
-  frame_utils::getSceneDepth(new_frames_->at(0), depth_median_, depth_min_, depth_max_);
-  depth_filter_->addKeyframe(new_frames_->at(0), depth_median_, 0.5*depth_min_, depth_median_*1.5);
+  frame_utils::getSceneDepth(new_frames_->at(0), depth_median_[0], depth_min_[0], depth_max_[0]);
+  depth_filter_->addKeyframe(new_frames_->at(0), depth_median_[0], 0.5*depth_min_[0], depth_median_[0]*1.5);
 
   SVO_INFO_STREAM("Init: Selected first frame.");
   stage_ = Stage::kTracking;
@@ -121,8 +121,8 @@ UpdateResult FrameHandlerStereo::processFrame()
 
   // ---------------------------------------------------------------------------
   // select keyframe
-  frame_utils::getSceneDepth(new_frames_->at(0), depth_median_, depth_min_, depth_max_);
-  if(!need_new_kf_(new_frames_->at(0)->T_f_w_))
+  frame_utils::getSceneDepth(new_frames_->at(0), depth_median_[0], depth_min_[0], depth_max_[0]);
+  if(!need_new_kf_(new_frames_->at(0)->T_f_w_, 0))
   {
     for(size_t i=0; i<new_frames_->size(); ++i)
       depth_filter_->updateSeeds(overlap_kfs_.at(i), new_frames_->at(i));
@@ -165,7 +165,7 @@ UpdateResult FrameHandlerStereo::makeKeyframe()
     setDetectorOccupiedCells(kf_id, depth_filter_->feature_detector_);
   } // release lock
   depth_filter_->addKeyframe(
-        new_frames_->at(kf_id), depth_median_, 0.5*depth_min_, depth_median_*1.5);
+        new_frames_->at(kf_id), depth_median_[0], 0.5*depth_min_[0], depth_median_[0]*1.5);
   depth_filter_->updateSeeds(overlap_kfs_.at(0), new_frames_->at(0));
   depth_filter_->updateSeeds(overlap_kfs_.at(1), new_frames_->at(1));
 

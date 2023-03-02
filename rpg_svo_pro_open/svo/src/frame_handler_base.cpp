@@ -76,15 +76,15 @@ kUpdateResultName
 FrameHandlerBase::FrameHandlerBase(const BaseOptions& base_options, const ReprojectorOptions& reprojector_options,
                                    const DepthFilterOptions& depthfilter_options,
                                    const DetectorOptions& detector_options, const InitializationOptions& init_options,
-                                   const FeatureTrackerOptions& tracker_options, const CameraBundle::Ptr& cameras) :
+                                   const FeatureTrackerOptions& tracker_options, const CameraBundle::Ptr& cameras,
+                                   bool use_multi_cam) : use_multi_cam_(use_multi_cam),
     options_(base_options), cams_(cameras), stage_(Stage::kPaused), set_reset_(false), set_start_(false), map_(new Map), acc_frame_timings_(
-        10), acc_num_obs_(10), num_obs_last_(0), tracking_quality_(TrackingQuality::kInsufficient), relocalization_n_trials_(
-        0)
+        10), acc_num_obs_(10), num_obs_last_(0), tracking_quality_(TrackingQuality::kInsufficient), relocalization_n_trials_(0)
 {
   // sanity checks
   CHECK_EQ(reprojector_options.cell_size, detector_options.cell_size);
 
-  need_new_kf_ = std::bind(&FrameHandlerBase::needNewKf, this, std::placeholders::_1);
+  need_new_kf_ = std::bind(&FrameHandlerBase::needNewKf, this, std::placeholders::_1, std::placeholders::_2);
 
   if (options_.trace_statistics)
   {
@@ -336,10 +336,23 @@ bool FrameHandlerBase::addFrameBundle(const FrameBundlePtr& frame_bundle)
       {
         //the points in the last frame were updated, hence we also update the
         //seeds with the new depth values
-        frame_utils::getSceneDepth(last_frames_->frames_[0],
-            depth_median_, depth_min_, depth_max_);
-        depth_filter_->updateSeeds(overlap_kfs_.at(0),
-                                   last_frames_->frames_[0]);
+        if(!frame_utils::getSceneDepth(last_frames_->frames_[0],depth_median_[0], depth_min_[0], depth_max_[0]))
+        {
+          depth_min_[0] = 0.2; depth_median_[0] = 3.0; depth_max_[0] = 100;
+        }
+
+        if(use_multi_cam_)
+        {
+          for(size_t i=0; i<last_frames_->size(); ++i)
+          {
+            depth_filter_->updateSeeds(overlap_kfs_.at(i), last_frames_->at(i));
+          }
+        }
+        else
+        {
+          depth_filter_->updateSeeds(overlap_kfs_.at(0),last_frames_->frames_[0]);
+        }
+
         VLOG(2) << "Adjusting SVO scale to backend";
       }
     }
@@ -413,7 +426,7 @@ bool FrameHandlerBase::addFrameBundle(const FrameBundlePtr& frame_bundle)
   if (update_res_ == UpdateResult::kKeyframe)
   {
     // Set flag in bundle. Before we only set each frame individually.
-    new_frames_->setKeyframe();
+    new_frames_->setKeyframe(); // 设置 frame_bundle 的标志位
     last_kf_time_sec_ = new_frames_->at(0)->getTimestampSec();
     FramePtr last_rm_kf = nullptr;
     map_->getLastRemovedKF(&last_rm_kf);
@@ -1025,18 +1038,19 @@ void FrameHandlerBase::setTrackingQuality(const size_t num_observations)
 }
 
 //------------------------------------------------------------------------------
-bool FrameHandlerBase::needNewKf(const Transformation&)
+bool FrameHandlerBase::needNewKf(const Transformation&, int id)
 {
-  const std::vector<FramePtr>& visible_kfs = overlap_kfs_.at(0);
+  const std::vector<FramePtr>& visible_kfs = overlap_kfs_.at(id);
   if (options_.kfselect_criterion == KeyframeCriterion::DOWNLOOKING)
   {
+    // 1. 俯视情况下，若距离重叠视野关键帧都较远，则选为关键帧
     for (const auto& frame : visible_kfs)
     {
       // TODO: does not generalize to multiple cameras!
-      Vector3d relpos = new_frames_->at(0)->T_cam_world() * frame->pos();
-      if (fabs(relpos.x()) / depth_median_ < options_.kfselect_min_dist
-          && fabs(relpos.y()) / depth_median_ < options_.kfselect_min_dist * 0.8
-          && fabs(relpos.z()) / depth_median_ < options_.kfselect_min_dist * 1.3)
+      Vector3d relpos = new_frames_->at(id)->T_cam_world() * frame->pos();
+      if (fabs(relpos.x()) / depth_median_[id] < options_.kfselect_min_dist
+          && fabs(relpos.y()) / depth_median_[id] < options_.kfselect_min_dist * 0.8
+          && fabs(relpos.z()) / depth_median_[id] < options_.kfselect_min_dist * 1.3)
         return false;
     }
     VLOG(40) << "KF Select: NEW KEYFRAME";
@@ -1046,14 +1060,20 @@ bool FrameHandlerBase::needNewKf(const Transformation&)
   // else, FORWARD:
   if (isBackendValid())
   {
+    // 2. 时间长就可以选为关键帧
     if (last_kf_time_sec_ > 0 && options_.kfselect_backend_max_time_sec > 0 &&
-        new_frames_->at(0)->getTimestampSec() - last_kf_time_sec_ >
+        new_frames_->at(id)->getTimestampSec() - last_kf_time_sec_ >
         options_.kfselect_backend_max_time_sec)
     {
       return true;
     }
   }
-  size_t n_tracked_fts = new_frames_->numTrackedLandmarks();
+
+  // 3. 多相机一共跟踪的路标点数目过多，则不选为关键帧
+  //size_t n_tracked_fts = new_frames_->numTrackedLandmarks();
+  size_t n_tracked_fts = new_frames_->at(id)->numTrackedLandmarks();
+  size_t n_num_features = new_frames_->at(id)->numFeatures();
+  std::cout << "第" << id << " 号相机跟踪了 " << n_tracked_fts << " 个路标点 ( in " << n_num_features << " )" << std::endl;
 
   if (n_tracked_fts > options_.kfselect_numkfs_upper_thresh)
   {
@@ -1061,70 +1081,136 @@ bool FrameHandlerBase::needNewKf(const Transformation&)
     return false;
   }
 
-  // TODO: this only works for mono!
-  if (last_frames_->at(0)->id() - map_->last_added_kf_id_ <
-      options_.kfselect_min_num_frames_between_kfs)
+  // TODO: this only works for mono! -> (xie chen)重定位部分会改写 last_frames_，导致这里会有越界错误
+  // 4. 关键帧之间至少隔 2 帧，若是多相机情况就改为判断 bundle_id
+  if(use_multi_cam_)
   {
-    VLOG(40) << "KF Select: NO NEW KEYFRAME We just had a KF";
-    return false;
+    if(last_frames_->getBundleId() - map_->last_added_kf_bundle_id_
+            < options_.kfselect_min_num_frames_between_kfs)
+    {
+      VLOG(40) << "KF Select: NO NEW KEYFRAME We just had a KF";
+      return false;
+    }
+  }
+  else
+  {
+    if (last_frames_->at(0)->id() - map_->last_added_kf_id_ <
+        options_.kfselect_min_num_frames_between_kfs)
+    {
+      VLOG(40) << "KF Select: NO NEW KEYFRAME We just had a KF";
+      return false;
+    }
   }
 
-  if (n_tracked_fts < options_.kfselect_numkfs_lower_thresh)
+  // 5. 多相机一共跟踪的特征点数目少于阈值，则设置关键帧
+  // TODO (xie chen): 但对于多相机，若一直朝向弱纹理（num_features_较少），此处会一直触发，白白设置了一个无用的关键帧
+  if (n_num_features > options_.kfselect_numkfs_lower_thresh && n_tracked_fts < options_.kfselect_numkfs_lower_thresh)
   {
     VLOG(40) << "KF Select: NEW KEYFRAME Below lower bound";
     return true;
   }
 
+  // 6. 距离最后一个关键帧（组）的光流小于一个阈值，则不设置关键帧
   // check that we have at least X disparity w.r.t to last keyframe
   if (options_.kfselect_min_disparity > 0)
   {
     int kf_id = map_->getLastKeyframe()->id();
-    std::vector<double> disparities;
-    const FramePtr& frame = new_frames_->at(0);
-    disparities.reserve(frame->num_features_);
-    for (size_t i = 0; i < frame->num_features_; ++i)
+    FramePtr last_keyframe = map_->keyframes_[kf_id];
+    if(!last_keyframe->group_.empty())
     {
-      if (frame->landmark_vec_[i])
+      for(const auto& pair: last_keyframe->group_)
       {
-        const Point::KeypointIdentifierList& observations =
-            frame->landmark_vec_[i]->obs_;
-        for (auto it = observations.rbegin(); it != observations.rend(); ++it)
+        int group_kf_id = pair.first;
+
+        std::vector<double> disparities;
+        const FramePtr& frame = new_frames_->at(id);
+        disparities.reserve(frame->num_features_);
+        for (size_t i = 0; i < frame->num_features_; ++i)
         {
-          if (it->frame_id == kf_id)
+          if (frame->landmark_vec_[i])
           {
-            if (FramePtr kf = it->frame.lock())
+            const Point::KeypointIdentifierList& observations =
+                    frame->landmark_vec_[i]->obs_;
+            for (auto it = observations.rbegin(); it != observations.rend(); ++it)
             {
-              disparities.push_back(
-                    (frame->px_vec_.col(i) -
-                     kf->px_vec_.col(it->keypoint_index_)).norm());
+              if (it->frame_id == group_kf_id)
+              {
+                if (FramePtr kf = it->frame.lock())
+                {
+                  disparities.push_back(
+                          (frame->px_vec_.col(i) -
+                           kf->px_vec_.col(it->keypoint_index_)).norm());
+                }
+                break;
+              }
             }
-            break;
+          }
+          // TODO(cfo): loop also over seed references!
+        }
+
+        // 与 group 中某一个相机光流不足就返回，不选择关键帧
+        if (!disparities.empty())
+        {
+          double disparity = vk::getMedian(disparities);
+          VLOG(40) << "KF Select: disparity = " << disparity;
+          if (disparity < options_.kfselect_min_disparity)
+          {
+            VLOG(40) << "KF Select: NO NEW KEYFRAME disparity not large enough";
+            return false;
           }
         }
-      }
-      // TODO(cfo): loop also over seed references!
+      } // end of for
     }
-
-    if (!disparities.empty())
+    else
     {
-      double disparity = vk::getMedian(disparities);
-      VLOG(40) << "KF Select: disparity = " << disparity;
-      if (disparity < options_.kfselect_min_disparity)
+      std::vector<double> disparities;
+      const FramePtr& frame = new_frames_->at(id);
+      disparities.reserve(frame->num_features_);
+      for (size_t i = 0; i < frame->num_features_; ++i)
       {
-        VLOG(40) << "KF Select: NO NEW KEYFRAME disparity not large enough";
-        return false;
+        if (frame->landmark_vec_[i])
+        {
+          const Point::KeypointIdentifierList& observations =
+                  frame->landmark_vec_[i]->obs_;
+          for (auto it = observations.rbegin(); it != observations.rend(); ++it)
+          {
+            if (it->frame_id == kf_id)
+            {
+              if (FramePtr kf = it->frame.lock())
+              {
+                disparities.push_back(
+                        (frame->px_vec_.col(i) -
+                         kf->px_vec_.col(it->keypoint_index_)).norm());
+              }
+              break;
+            }
+          }
+        }
+        // TODO(cfo): loop also over seed references!
+      }
+
+      if (!disparities.empty())
+      {
+        double disparity = vk::getMedian(disparities);
+        VLOG(40) << "KF Select: disparity = " << disparity;
+        if (disparity < options_.kfselect_min_disparity)
+        {
+          VLOG(40) << "KF Select: NO NEW KEYFRAME disparity not large enough";
+          return false;
+        }
       }
     }
-  }
+  } // end of if
 
+  // 7. 距离重叠视野关键帧的旋转角度小、平移小，就不选择关键帧，否则就选择关键帧
   for (const auto& kf : visible_kfs)
   {
     // TODO: doesn't generalize to rig!
     const double a =
-        Quaternion::log(new_frames_->at(0)->T_f_w_.getRotation() *
+        Quaternion::log(new_frames_->at(id)->T_f_w_.getRotation() *
                         kf->T_f_w_.getRotation().inverse()).norm()
             * 180/M_PI;
-    const double d = (new_frames_->at(0)->pos() - kf->pos()).norm();
+    const double d = (new_frames_->at(id)->pos() - kf->pos()).norm();
     if (a < options_.kfselect_min_angle
         && d < options_.kfselect_min_dist_metric)
     {

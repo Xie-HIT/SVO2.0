@@ -46,7 +46,7 @@ done
 echo "-- Evaluating on Newer College datasets"
 if ! [[ -e $EVALUATE_OUTPUT_DIR ]]
 then
-  mkdir $EVALUATE_OUTPUT_DIR
+  mkdir -p $EVALUATE_OUTPUT_DIR
 fi
 
 # check dataset exist and run them
@@ -59,30 +59,37 @@ do
     printf "\033[32m [Success] Found dataset: %s \033[0m\n" "$DATASET_ROOT""/$var"
     if ! [[ -e WORK_DIR ]]
     then
-      mkdir $WORK_DIR
+      mkdir -p $WORK_DIR
     fi
-    echo "Output will be put on: $WORK_DIR"
+    echo "-- Output will be put on: $WORK_DIR"
   else
     printf "\033[33m [Warning] No such dataset: %s \033[0m\n" "$DATASET_ROOT""/$var"
   fi
 
-  echo "Running SLAM on $var..."
+  echo "-- Running SLAM on $var..."
 
 if ! [ $SKIP ]
 then
-  gnome-terminal --tab  -q --command="bash -c 'roslaunch svo_ros newer_college_vio_multicam.launch'" \
+  gnome-terminal --tab  -q --command="bash -c 'roslaunch svo_ros newer_college_vio_multicam.launch; $SHELL'" \
   --tab -q --command="bash -c 'cd /home/xgrids/SLAM数据集/Newer_College/Collection1/$var; rosbag play -d 10 $var.bag'" \
   --tab -q --command="bash -c 'cd $WORK_DIR; rosbag record --output-name=Evaluate-$var /svo/pose_imu __name:=my_bag; rosnode kill /my_bag'"
 fi
 
   # wait SLAM to finish
-  continue=n
-  while [[ $continue != Y && $continue != y ]]
+  continue="n"
+  while ! [[ $continue == Y || $continue == y ]]
   do
-    read -a continue -p "Continue(Y/y): "
+    read -a continue -rp "-- Continue(Y/n): "
+    if ! [[ ${continue[0]} == Y || ${continue[0]} == N || ${continue[0]} == y || ${continue[0]} == n ]]
+    then
+      continue
+    elif [[ ${continue[0]} == N || ${continue[0]} == n ]]
+    then
+      exit
+    fi
   done
 
-  echo "Evaluating on $var..."
+  echo "-- Evaluating on $var..."
   sleep 5s
 
   # transform to TUM format

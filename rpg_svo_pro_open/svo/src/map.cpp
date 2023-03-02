@@ -15,7 +15,7 @@
 namespace svo {
 
 Map::Map()
-  : last_added_kf_id_(-1)
+  : last_added_kf_id_(-1), last_added_kf_bundle_id_(-1)
 {}
 
 Map::~Map()
@@ -29,6 +29,7 @@ void Map::reset()
   keyframes_.clear();
   sorted_keyframe_ids_.clear();
   last_added_kf_id_ = -1;
+  last_added_kf_bundle_id_ = -1;
   points_to_delete_.clear();
 }
 
@@ -55,6 +56,19 @@ void Map::removeKeyframe(const int frame_id)
       // frame->landmark_vec_[i] = nullptr;
     }
   }
+
+  // TODO (xie chen): 删掉关键帧的 group_ 成员变量也要作调整
+  if(!frame->group_.empty())
+  {
+    for(const auto& pair: frame->group_)
+    {
+      if(pair.first == frame_id)
+        continue;
+      FramePtr other_keyframe = pair.second.lock();
+      other_keyframe->group_.erase(frame_id);
+    }
+  }
+
   keyframes_.erase(it_kf);
 }
 
@@ -102,6 +116,7 @@ void Map::addKeyframe(const FramePtr& new_keyframe, bool temporal_map)
 
   keyframes_.insert(std::make_pair(new_keyframe->id(), new_keyframe));
   last_added_kf_id_ = new_keyframe->id();
+  last_added_kf_bundle_id_ = new_keyframe->bundleId();
   if(temporal_map)
   {
     sorted_keyframe_ids_.push_back(new_keyframe->id());

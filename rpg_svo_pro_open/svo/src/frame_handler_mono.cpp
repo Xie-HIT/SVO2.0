@@ -29,10 +29,11 @@ FrameHandlerMono::FrameHandlerMono(
     const InitializationOptions& init_options,
     const ReprojectorOptions& reprojector_options,
     const FeatureTrackerOptions& tracker_options,
-    const CameraBundle::Ptr& cam)
+    const CameraBundle::Ptr& cam,
+    bool use_multi_cam)
   : FrameHandlerBase(
       base_options, reprojector_options, depth_filter_options,
-      feature_detector_options, init_options, tracker_options, cam)
+      feature_detector_options, init_options, tracker_options, cam, use_multi_cam)
 { ; }
 
 UpdateResult FrameHandlerMono::processFrameBundle()
@@ -100,16 +101,18 @@ UpdateResult FrameHandlerMono::processFirstFrame()
   }
   // make new frame keyframe
   newFrame()->setKeyframe();
-  frame_utils::getSceneDepth(newFrame(), depth_median_, depth_min_, depth_max_);
+  if(!frame_utils::getSceneDepth(newFrame(),depth_median_[0], depth_min_[0], depth_max_[0]))
+  {
+    depth_min_[0] = 0.2; depth_median_[0] = 3.0; depth_max_[0] = 100;
+  }
   VLOG(40) << "Current Frame Depth: " << "min: " << depth_min_
           << ", max: " << depth_max_ << ", median: " << depth_median_;
   depth_filter_->addKeyframe(
-              newFrame(), depth_median_, 0.5*depth_min_, depth_median_*1.5); // 将当前帧选为关键帧
+              newFrame(), depth_median_[0], 0.5*depth_min_[0], depth_median_[0]*1.5); // 将当前帧选为关键帧
   VLOG(40) << "Updating seeds in second frame using last frame...";
   depth_filter_->updateSeeds({ newFrame() }, lastFrameUnsafe()); // 用上一帧去更新当前关键帧
 
   // add frame to map
-
   map_->addKeyframe(newFrame(),
                     bundle_adjustment_type_==BundleAdjustmentType::kCeres);
   stage_ = Stage::kTracking;
@@ -124,7 +127,21 @@ UpdateResult FrameHandlerMono::processFrame()
   VLOG(40) << "Updating seeds in overlapping keyframes...";
   // this is useful when the pipeline is with the backend,
   // where we should have more accurate pose at this moment
-  depth_filter_->updateSeeds(overlap_kfs_.at(0), lastFrame());
+  // TODO (xie chen): 在重定位阶段就不要更新 Seed 了
+  if(stage_ != Stage::kRelocalization)
+  {
+    if(use_multi_cam_)
+    {
+      for(size_t i=0; i<lastFrames().size(); ++i)
+      {
+        depth_filter_->updateSeeds(overlap_kfs_.at(i), lastFrames()[i]);
+      }
+    }
+    else
+    {
+      depth_filter_->updateSeeds(overlap_kfs_.at(0), lastFrame());
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // tracking
@@ -167,29 +184,98 @@ UpdateResult FrameHandlerMono::processFrame()
   // ---------------------------------------------------------------------------
   // select keyframe
   VLOG(40) << "===== Keyframe Selection =====";
-  frame_utils::getSceneDepth(newFrame(), depth_median_, depth_min_, depth_max_);
-  VLOG(40) << "Current Frame Depth: " << "min: " << depth_min_
-           << ", max: " << depth_max_ << ", median: " << depth_median_;
-  initializer_->setDepthPrior(depth_median_);
+
+  if(use_multi_cam_)
+  {
+    for(size_t i=0; i<newFrames().size(); ++i)
+    {
+      const FramePtr& newFrame = newFrames()[i];
+      if(!frame_utils::getSceneDepth(newFrame, depth_median_[i], depth_min_[i], depth_max_[i]))
+      {
+        depth_min_[i] = 0.2; depth_median_[i] = 3.0; depth_max_[i] = 100;
+      }
+      VLOG(40) << "Current Frame Depth: " << "min: " << depth_min_[i]
+               << ", max: " << depth_max_[i] << ", median: " << depth_median_[i];
+    }
+  }
+  else
+  {
+    if(!frame_utils::getSceneDepth(newFrame(),depth_median_[0], depth_min_[0], depth_max_[0]))
+    {
+      depth_min_[0] = 0.2; depth_median_[0] = 3.0; depth_max_[0] = 100;
+    }
+    VLOG(40) << "Current Frame Depth: " << "min: " << depth_min_[0]
+             << ", max: " << depth_max_[0] << ", median: " << depth_median_[0];
+  }
+
+  initializer_->setDepthPrior(depth_median_[0]);
   initializer_->have_depth_prior_ = true;
 
-  // 若不需要关键帧
-  if(!need_new_kf_(newFrame()->T_f_w_)
-     || tracking_quality_ == TrackingQuality::kBad
-     || stage_ == Stage::kRelocalization)
+  // TODO (xie chen): 多相机的关键帧选取策略
+  if(use_multi_cam_)
   {
-    if(tracking_quality_ == TrackingQuality::kGood)
+    keyframe_candidates_.clear();
+    for(size_t i=0; i<newFrames().size(); ++i)
     {
-      VLOG(40) << "Updating seeds in overlapping keyframes...";
-      CHECK(!overlap_kfs_.empty());
-      // now the seed is updated at the beginning of next frame
-//      depth_filter_->updateSeeds(overlap_kfs_.at(0), newFrame());
+      const FramePtr& newFrame = newFrames()[i];
+
+      if(need_new_kf_(newFrame->T_f_w_, i)/* TODO */
+         && tracking_quality_ != TrackingQuality::kBad && stage_ != Stage::kRelocalization)
+      {
+        keyframe_candidates_.emplace_back(newFrame);
+      }
+      if(tracking_quality_ == TrackingQuality::kGood)
+      {
+        VLOG(40) << "Updating seeds in overlapping keyframes...";
+        CHECK(!overlap_kfs_.empty());
+      }
     }
-    return UpdateResult::kDefault;
+    std::cout << "update " << keyframe_candidates_.size() << " new keyframes" << std::endl;
+    if(keyframe_candidates_.empty())
+      return UpdateResult::kDefault;
+  }
+  else
+  {
+    // 关键帧选取策略，不需要关键帧会返回
+    if(!need_new_kf_(newFrame()->T_f_w_, 0)
+       || tracking_quality_ == TrackingQuality::kBad
+       || stage_ == Stage::kRelocalization)
+    {
+      if(tracking_quality_ == TrackingQuality::kGood)
+      {
+        VLOG(40) << "Updating seeds in overlapping keyframes...";
+        CHECK(!overlap_kfs_.empty());
+        // now the seed is updated at the beginning of next frame
+//      depth_filter_->updateSeeds(overlap_kfs_.at(0), newFrame());
+      }
+      return UpdateResult::kDefault;
+    }
+  }
+
+  // TODO (xie chen)：加入关键帧的多相机之间应该互相知晓彼此
+  if(use_multi_cam_)
+  {
+    for(const FramePtr& newFrame: keyframe_candidates_)
+    {
+      for(const FramePtr& keyframe_candidate: keyframe_candidates_)
+      {
+        newFrame->group_.insert(std::make_pair(keyframe_candidate->id(), keyframe_candidate));
+      }
+    }
   }
 
   // 若需要关键帧
-  newFrame()->setKeyframe();
+  if(use_multi_cam_)
+  {
+    for(const FramePtr& newFrame: keyframe_candidates_)
+    {
+      newFrame->setKeyframe();
+    }
+  }
+  else
+  {
+    newFrame()->setKeyframe();
+  }
   VLOG(40) << "New keyframe selected.";
 
   // ---------------------------------------------------------------------------
@@ -205,7 +291,17 @@ UpdateResult FrameHandlerMono::processFrame()
     feature_detection_utils::mergeGrids(
           map_point_grid, &depth_filter_->sec_feature_detector_->grid_);
   }
-  upgradeSeedsToFeatures(newFrame());
+  if(use_multi_cam_)
+  {
+    for(const FramePtr& newFrame: keyframe_candidates_)
+    {
+      upgradeSeedsToFeatures(newFrame);
+    }
+  }
+  else
+  {
+    upgradeSeedsToFeatures(newFrame());
+  }
   // init new depth-filters, set feature-detection grid-cells occupied that
   // already have a feature
   //
@@ -218,8 +314,20 @@ UpdateResult FrameHandlerMono::processFrame()
     setDetectorOccupiedCells(0, depth_filter_->feature_detector_);
 
   } // release lock
-  depth_filter_->addKeyframe(
-        newFrame(), depth_median_, 0.5*depth_min_, depth_median_*1.5);
+  if(use_multi_cam_)
+  {
+    for(size_t i=0; i<keyframe_candidates_.size(); ++i)
+    {
+      const FramePtr &newFrame = keyframe_candidates_[i];
+      depth_filter_->addKeyframe(
+              newFrame, depth_median_[i], 0.5*depth_min_[i], depth_median_[i]*1.5);
+    }
+  }
+  else
+  {
+    depth_filter_->addKeyframe(
+            newFrame(), depth_median_[0], 0.5*depth_min_[0], depth_median_[0]*1.5);
+  }
 
   if(options_.update_seeds_with_old_keyframes)
   {
@@ -234,8 +342,19 @@ UpdateResult FrameHandlerMono::processFrame()
 //  depth_filter_->updateSeeds(overlap_kfs_.at(0), newFrame());
 
   // add keyframe to map
-  map_->addKeyframe(newFrame(),
-                    bundle_adjustment_type_==BundleAdjustmentType::kCeres);
+  if(use_multi_cam_)
+  {
+    for(const FramePtr& newFrame: keyframe_candidates_)
+    {
+      map_->addKeyframe(newFrame,
+                        bundle_adjustment_type_==BundleAdjustmentType::kCeres);
+    }
+  }
+  else
+  {
+    map_->addKeyframe(newFrame(),
+                      bundle_adjustment_type_==BundleAdjustmentType::kCeres);
+  }
 
   // if limited number of keyframes, remove the one furthest apart
   if(options_.max_n_kfs > 2)
@@ -267,7 +386,25 @@ UpdateResult FrameHandlerMono::relocalizeFrame(
 
   VLOG_EVERY_N(1, 20) << "Relocalizing frame";
   // FIXME（xie chen）：当重定位时，下面只加入了一帧 ref_keyframe，导致后续某个 assert 会不支持多相机，解决方案是注释掉那个 assert（sparse_img_align.cpp line41）
-  FrameBundle::Ptr ref_frame(new FrameBundle({ref_keyframe}, ref_keyframe->bundleId()));
+  // TODO (xie chen)：多相机重定位时加入 multi-camera rig
+  FrameBundle::Ptr ref_frame;
+  if(use_multi_cam_)
+  {
+    std::vector<FramePtr> frames{ref_keyframe};
+    for(const auto& pair: ref_keyframe->group_)
+    {
+      if(pair.first == ref_keyframe->id())
+        continue;
+      FramePtr other_keyframe = pair.second.lock();
+      assert(other_keyframe->bundleId() == ref_keyframe->bundleId());
+      frames.emplace_back(other_keyframe);
+    }
+    ref_frame = std::make_shared<FrameBundle>(frames,ref_keyframe->bundleId());
+  }
+  else
+  {
+    ref_frame = std::make_shared<FrameBundle>(std::vector<FramePtr>{ref_keyframe},ref_keyframe->bundleId());
+  }
   last_frames_ = ref_frame;
   UpdateResult res = processFrame();
   if(res == UpdateResult::kDefault)
@@ -304,10 +441,21 @@ FramePtr FrameHandlerMono::lastFrame() const
   return (last_frames_ == nullptr) ? nullptr : last_frames_->at(0);
 }
 
+std::vector<FramePtr>& FrameHandlerMono::lastFrames() const
+{
+  return last_frames_->frames_;
+}
+
 const FramePtr& FrameHandlerMono::newFrame() const
 {
-  return new_frames_->frames_[0];
+    return new_frames_->frames_[0];
 }
+
+const std::vector<FramePtr>& FrameHandlerMono::newFrames() const
+{
+    return new_frames_->frames_;
+}
+
 
 const FramePtr& FrameHandlerMono::lastFrameUnsafe() const
 {

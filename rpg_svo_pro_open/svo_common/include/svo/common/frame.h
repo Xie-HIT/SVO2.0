@@ -56,6 +56,10 @@ public:
   Transformation T_body_cam_;
   Transformation T_cam_body_;
 
+  // TODO (xie chen): multi-camera index in new keyframe
+  //  <相机 id_, 多相机中某一相机>，多相机中这些相机作为一个集合加入到关键帧中，包含自己
+  std::map<int, FrameWeakPtr> group_;
+
   // Features
   // All vectors must have the same length/cols at all time!
   // {
@@ -67,7 +71,7 @@ public:
   Gradients grad_vec_;          ///< Gradient direction of edgelet normal
   FeatureTypes type_vec_;       ///< Is the feature a corner or an edgelet?
   Landmarks landmark_vec_;      ///< Reference to 3D point. Can contain nullpointers!
-  TrackIds track_id_vec_;       ///< ID of every observed 3d point. -1 if no point assigned.
+  TrackIds track_id_vec_;       ///< ID of every observed 3d point. -1 if no point assigned.y
   SeedRefs seed_ref_vec_;       ///< Only for seeds during reprojection
   SeedStates invmu_sigma2_a_b_vec_; ///< Vector containing all necessary information for seed update.
   std::vector<bool> in_ba_graph_vec_;

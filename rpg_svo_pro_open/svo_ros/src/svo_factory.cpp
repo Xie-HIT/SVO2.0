@@ -451,7 +451,8 @@ FrameHandlerMono::Ptr makeMono(const ros::NodeHandle& pnh, const CameraBundlePtr
         loadInitializationOptions(pnh), // 读取初始化的参数
         loadReprojectorOptions(pnh), // 读取重投影相关的参数
         loadTrackerOptions(pnh), // LK光流相关的参数
-        ncam // camera的yaml文件
+        ncam, // camera的yaml文件
+        false // use multi-camera
         );
 
   // Get initial position and orientation of IMU
@@ -474,7 +475,8 @@ FrameHandlerMono::Ptr makeMono_multi(const ros::NodeHandle& pnh, const CameraBun
                   loadInitializationOptions(pnh), // 读取初始化的参数
                   loadReprojectorOptions(pnh), // 读取重投影相关的参数
                   loadTrackerOptions(pnh), // LK光流相关的参数
-                  ncam // camera的yaml文件
+                  ncam, // camera的yaml文件
+                  true // use multi-camera
                  );
 
   // Get initial position and orientation of IMU

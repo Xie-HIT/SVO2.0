@@ -122,9 +122,9 @@ UpdateResult FrameHandlerArray::processSecondFrame()
   for(const FramePtr& frame : new_frames_->frames_)
   {
     frame->setKeyframe();
-    frame_utils::getSceneDepth(frame, depth_median_, depth_min_, depth_max_);
+    frame_utils::getSceneDepth(frame, depth_median_[0], depth_min_[0], depth_max_[0]);
     depth_filter_->addKeyframe(
-                frame, depth_median_, 0.5*depth_min_, depth_median_*1.5);
+                frame, depth_median_[0], 0.5*depth_min_[0], depth_median_[0]*1.5);
     map_->addKeyframe(frame,
                       bundle_adjustment_type_==BundleAdjustmentType::kCeres);
   }
@@ -162,7 +162,7 @@ UpdateResult FrameHandlerArray::processFrame()
 
   // ---------------------------------------------------------------------------
   // select keyframe
-  frame_utils::getSceneDepth(new_frames_->at(0), depth_median_, depth_min_, depth_max_);
+  frame_utils::getSceneDepth(new_frames_->at(0), depth_median_[0], depth_min_[0], depth_max_[0]);
   //if(!need_new_kf_(new_frames_->at(0)->T_f_w_))
   if(frame_counter_ % 4 != 0)
   {

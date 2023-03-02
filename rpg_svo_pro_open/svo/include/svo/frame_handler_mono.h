@@ -36,7 +36,8 @@ public:
       const InitializationOptions& init_options,
       const ReprojectorOptions& reprojector_options,
       const FeatureTrackerOptions& tracker_options,
-      const CameraBundle::Ptr& cam);
+      const CameraBundle::Ptr& cam,
+      bool use_multi_cam);
 
   virtual ~FrameHandlerMono() = default;
 
@@ -78,6 +79,7 @@ public:
   /// well or if you call this function when pipeline is not running, i.e.,
   /// vo->stage()==STAGE_PAUSED.
   FramePtr lastFrame() const;
+  std::vector<FramePtr>& lastFrames() const;
 
   /// @}
 
@@ -87,6 +89,7 @@ protected:
 
   // helpers
   const FramePtr& newFrame() const;
+  const std::vector<FramePtr>& newFrames() const;
 
   // unsafe because last_frame might be nullptr. use this function only
   // when you are sure that it is set!

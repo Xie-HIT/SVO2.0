@@ -74,8 +74,9 @@ size_t SparseImgAlign::run(
 
   // the variable to be optimized is the imu-pose of the current frame
   // 优化的初始值
+  // TODO (xie chen): 理论上需考虑当前相机与重定位相机顺序的一致性，但实际上这是到 IMU 的变换，也可以使用 0 作索引
   Transformation T_icur_iref =
-      cur_frames_->at(0)->T_imu_world() * T_iref_world_.inverse();
+      cur_frames_->at(ref_frames->at(0)->nframe_index_)->T_imu_world() * T_iref_world_.inverse();
 
   SparseImgAlignState state;
   state.T_icur_iref = T_icur_iref;
@@ -105,9 +106,9 @@ size_t SparseImgAlign::run(
   }
 
   // finished, we save the pose in the frame
-  for(auto f : cur_frames->frames_)
+  for(const auto& f : cur_frames->frames_)
   {
-    f->T_f_w_ = f->T_cam_imu()*state.T_icur_iref*T_iref_world_;
+    f->T_f_w_ = f->T_cam_imu() * state.T_icur_iref * T_iref_world_;
   }
 
   // reset initial values of illumination estimation TODO: make reset function
@@ -142,12 +143,14 @@ double SparseImgAlign::evaluateError(
   size_t feature_counter = 0; // used to compute the cache index
   for(size_t i=0; i<ref_frames_->size(); ++i)
   {
+    FramePtr ref_frame = ref_frames_->at(i);
+    FramePtr cur_frame = cur_frames_->at(ref_frame->nframe_index_); // TODO (xie chen)：若还使用索引 i，则第 2 个 ref_frame，可能是第 4 个相机，导致重定位失败
+
     const Transformation T_cur_ref =
-        cur_frames_->at(i)->T_cam_imu() * state.T_icur_iref
-        * ref_frames_->at(i)->T_imu_cam();
+            cur_frame->T_cam_imu() * state.T_icur_iref * ref_frame->T_imu_cam();
     std::vector<Vector2d>* match_pxs = nullptr;
     sparse_img_align_utils::computeResidualsOfFrame(
-          cur_frames_->at(i), level_,
+            cur_frame, level_,
           patch_size_, fts_vec_.at(i).size(), T_cur_ref,
           state.alpha, state.beta,
           ref_patch_cache_, xyz_ref_cache_,
@@ -411,13 +414,13 @@ void computeResidualsOfFrame(
     const FramePtr& cur_frame,
     const size_t level,
     const int patch_size,
-    const size_t nr_features,
+    const size_t nr_features, // 1
     const Transformation& T_cur_ref,
     const float alpha,
     const float beta,
     const RefPatchCache& ref_patch_cache,
-    const XyzRefCache& xyz_ref_cache,
-    size_t& feature_counter,
+    const XyzRefCache& xyz_ref_cache, // 3
+    size_t& feature_counter, // 2
     std::vector<Vector2d>* match_pxs,
     ResidualCache& residual_cache,
     VisibilityMask& visibility_mask)
@@ -449,12 +452,14 @@ void computeResidualsOfFrame(
     // compute top left coordinate of patch to be interpolated
     const FloatType u_tl = uv_cur_pyr[0] - patch_center;
     const FloatType v_tl = uv_cur_pyr[1] - patch_center;
+    const int u_tl_i = std::floor(u_tl);
+    const int v_tl_i = std::floor(v_tl);
 
     // check if projection is within the image
-    if(u_tl  < 0.0
-       || v_tl  < 0.0
-       || u_tl + patch_size + 2.0 >= cur_img.cols
-       || v_tl + patch_size + 2.0 >= cur_img.rows)
+    if(u_tl_i  < 0.0
+       || v_tl_i  < 0.0
+       || u_tl_i + patch_size + 2.0 >= cur_img.cols
+       || v_tl_i + patch_size + 2.0 >= cur_img.rows)
     {
       visibility_mask(feature_counter) = false;
       continue;
@@ -463,9 +468,6 @@ void computeResidualsOfFrame(
     {
       visibility_mask(feature_counter) = true;
     }
-
-    const int u_tl_i = std::floor(u_tl);
-    const int v_tl_i = std::floor(v_tl);
 
     // compute bilateral interpolation weights for the current image
     const FloatType subpix_u_tl = u_tl-u_tl_i;
@@ -485,6 +487,7 @@ void computeResidualsOfFrame(
       for(int x = 0; x < patch_size; ++x, ++pixel_counter, ++cur_img_ptr)
       {
         // compute residual, with bilinear interpolation
+        // TODO (xiechen): 这里在多相机时添加关键帧后会段错误，原因是（u, v）是 -nan，导致索引 cur_img 时越界
         FloatType intensity_cur =
             wtl*cur_img_ptr[0]
             + wtr*cur_img_ptr[1]

@@ -169,6 +169,7 @@ Matcher::MatchResult Matcher::findEpipolarMatchDirect(
   // Compute start and end of epipolar line in old_kf for match search, on image plane
   const BearingVector A = T_cur_ref.getRotation().rotate(ref_ftr.f) + T_cur_ref.getPosition()*d_min_inv;
   const BearingVector B = T_cur_ref.getRotation().rotate(ref_ftr.f) + T_cur_ref.getPosition()*d_max_inv;
+
   Eigen::Vector2d px_A, px_B;
   cur_frame.cam()->project3(A, &px_A); // 极线在当前帧的起点
   cur_frame.cam()->project3(B, &px_B); // 极线在当前帧的终点

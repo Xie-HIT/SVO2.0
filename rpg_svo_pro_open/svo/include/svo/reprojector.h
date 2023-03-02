@@ -38,7 +38,7 @@ struct ReprojectorOptions
 
   /// We try to find the max_n_kfs closest keyframes that have overlapping
   /// field of view.
-  size_t max_n_kfs = 5;
+  size_t max_n_kfs = 4 * 5;
 
   /// If we don't find enough 3d points or converged seeds, also try to match
   /// unconverged seeds.

@@ -355,7 +355,7 @@ void CeresBackendInterface::addLandmarksAndObservationsToBackend(
     const FeatureType& type = frame->type_vec_[kp_idx];
 
     // check if feature is associated to landmark
-    if (point == nullptr)
+    if (point == nullptr || std::isnan(point->pos_[0]))
     {
       continue;
     }

@@ -45,7 +45,7 @@ struct BaseOptions
   /// Default is 10. Set to 0 if all keyframes should remain in the map.
   /// More keyframes may reduce drift but since no loop-closures are actively
   /// detected and closed it is not beneficial to accumulate all keyframes.
-  size_t max_n_kfs = 10; // 滑窗大小
+  size_t max_n_kfs = 4 * 10; // 滑窗大小
 
   /// Keyframe selection criterion: If we have a downlooking camera (e.g. on
   /// quadrotor), select DOWNLOOKING. Otherwise, select FORWARD.
@@ -58,11 +58,11 @@ struct BaseOptions
 
   /// Keyframe selection for FORWARD: If we are tracking more than this amount
   /// of features, then we don't take a new keyframe.
-  size_t kfselect_numkfs_upper_thresh = 110; // 前视1：基于跟踪点数目选择关键帧
+  size_t kfselect_numkfs_upper_thresh = 110; // 前视1：基于跟踪点数目选择关键帧, 110
 
   /// Keyframe selection for FORWARD : If we have less than this amount of
   /// features we always select a new keyframe.
-  size_t kfselect_numkfs_lower_thresh = 80; // 前视2：基于跟踪点数目选择关键帧
+  size_t kfselect_numkfs_lower_thresh = 80; // 前视2：基于跟踪点数目选择关键帧, 80
 
   /// Keyframe selection for FORWARD : Minimum distance in meters (set initial
   /// scale!) before a new keyframe is selected.
@@ -184,7 +184,7 @@ struct BaseOptions
   /// If from one frame to the other we suddenly track much less features,
   /// this can be an indication that something is wrong and we set the stage
   /// to STAGE_RELOCALIZING and the tracking quality to TRACKING_INSUFFICIENT.
-  int quality_max_fts_drop = 40; // 帧间突然少了这么多特征点会进入重定位模式
+  int quality_max_fts_drop = 80; // 帧间突然少了这么多特征点会进入重定位模式
 
   /// Once we are in relocalization mode, we allow a fixed number of images
   /// to try and relocalize before we reset() and set to STAGE_PAUSED.
@@ -245,7 +245,7 @@ public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
   typedef std::mutex mutex_t;
   typedef std::unique_lock<mutex_t> ulock_t;
-  typedef std::function<bool(const Transformation& pose)> NewKeyFrameCriteria;
+  typedef std::function<bool(const Transformation& pose, int id)> NewKeyFrameCriteria;
 
   /// Default constructor
   FrameHandlerBase(
@@ -255,7 +255,8 @@ public:
       const DetectorOptions& detector_options,
       const InitializationOptions& init_options,
       const FeatureTrackerOptions& tracker_options,
-      const CameraBundle::Ptr& cameras);
+      const CameraBundle::Ptr& cameras,
+      bool use_multi_cam = false);
 
   virtual ~FrameHandlerBase();
 
@@ -380,6 +381,12 @@ public:
   ///
   /// @{
 
+  /// 是否使用多相机
+  bool use_multi_cam_;
+
+  /// 关键帧候选组
+  std::vector<FramePtr> keyframe_candidates_;
+
   /// Options for BaseFrameHandler module
   BaseOptions options_;
 
@@ -396,7 +403,7 @@ public:
   NewKeyFrameCriteria need_new_kf_;
 
   /// Default keyframe selection criterion.
-  virtual bool needNewKf(const Transformation& T_f_w);
+  virtual bool needNewKf(const Transformation& T_f_w, int id /* 多相机索引 */);
 
   /// Translation prior computed from simple constant velocity assumption
   Vector3d t_lastimu_newimu_;
@@ -432,9 +439,9 @@ protected:
   TrackingQuality tracking_quality_;            //!< An estimate of the tracking quality based on the number of tracked features.
   UpdateResult update_res_;                     //!< Update result of last frame bundle
   size_t frame_counter_ = 0; //!< Number of frames processed since started
-  double depth_median_;                 //!< Median depth at last frame
-  double depth_min_;                    //!< Min depth at last frame
-  double depth_max_;
+  double depth_median_[10];                 //!< Median depth at last frame, fix to multi-cmaera case (support 10 cameras at most, hard coding here)
+  double depth_min_[10];                    //!< Min depth at last frame, fix to multi-cmaera case (support 10 cameras at most, hard coding here)
+  double depth_max_[10];                    //!< Max depth at last frame, fix to multi-cmaera case (support 10 cameras at most, hard coding here)
 
   std::vector<std::vector<FramePtr>> overlap_kfs_; // 外层vector是多目的数量，内层是具有重叠视野的 N 个最近的关键帧
 
