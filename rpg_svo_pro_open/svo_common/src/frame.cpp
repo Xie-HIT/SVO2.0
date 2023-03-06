@@ -104,12 +104,12 @@ void Frame::resizeFeatureStorage(size_t num)
     level_vec_.conservativeResize(num);
     grad_vec_.conservativeResize(Eigen::NoChange, num);
     invmu_sigma2_a_b_vec_.conservativeResize(Eigen::NoChange, num);
-    track_id_vec_.conservativeResize(num);
+    track_id_vec_.conservativeResize(num); /// FIXME (xie chen): weird bug, zero when others are non-zero -> BUG in initializeSeeds() in depth_filter.cpp
 
     type_vec_.resize(num, FeatureType::kCorner);
     landmark_vec_.resize(num, nullptr);
     seed_ref_vec_.resize(num);
-    in_ba_graph_vec_.resize(num, false);
+    in_ba_graph_vec_.resize(num, false); /// FIXME (xie chen): weird bug, zero when others are non-zero -> BUG in initializeSeeds() in depth_filter.cpp
 
     // initial values
     level_vec_.tail(n_new).setZero();

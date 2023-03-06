@@ -300,6 +300,10 @@ void initializeSeeds(
     frame->landmark_vec_.resize(frame->px_vec_.cols(), nullptr);
     frame->seed_ref_vec_.resize(frame->px_vec_.cols());
 
+    // FIXME (xie chen): should resize too, otherwise bug happened in MotionDetector::findFeatureCorrespondence()
+    frame->track_id_vec_.resize(frame->px_vec_.cols());
+    frame->in_ba_graph_vec_.resize(frame->px_vec_.cols());
+
     // compute and normalize bearing vectors
     frame_utils::computeNormalizedBearingVectors(frame->px_vec_,
                                                  *frame->cam(), &frame->f_vec_);

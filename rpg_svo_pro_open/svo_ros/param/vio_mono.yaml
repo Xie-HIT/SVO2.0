@@ -128,7 +128,8 @@ use_ceres_backend: true
 ceres_verbose: false
 ceres_marginalize: true
 ceres_num_iterations: 3
-ceres_num_imu_frames: 3 
+ceres_num_imu_frames: 3  # sliding window size in backend
+backend_refine_extrinsics: false  # whether optimize extrincs, do not support [true]
 ceres_max_iteration_time: 0.04 # soft limit, set to -1 to deactivate
 publish_marker_scale_backend: 0.5 # set to -1 to deactivate visualization of landmarks
 backend_only_use_corners: false

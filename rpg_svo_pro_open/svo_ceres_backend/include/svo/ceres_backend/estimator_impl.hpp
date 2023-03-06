@@ -86,8 +86,7 @@ inline ceres::ResidualBlockId Estimator::addObservation(const FramePtr &frame,
       << "Incorrect pointer cast requested. ";
   std::shared_ptr<ceres_backend::ReprojectionError > reprojection_error =
       std::make_shared<ceres_backend::ReprojectionError>(
-        std::static_pointer_cast<const Camera>(
-          camera_rig_->getCameraShared(cam_idx)),
+        std::static_pointer_cast<const Camera>(camera_rig_->getCameraShared(cam_idx)),
         frame->px_vec_.col(keypoint_idx), information);
 
   if (isLandmarkFixed(landmark_backend_id.asInteger()))
@@ -95,7 +94,7 @@ inline ceres::ResidualBlockId Estimator::addObservation(const FramePtr &frame,
     reprojection_error->setPointConstant(true);
   }
 
-  BackendId extrinsics_id = constant_extrinsics_ids_[cam_idx];
+  BackendId extrinsics_id = constant_extrinsics_ids_[cam_idx]; /// 体坐标系到相机坐标系的外参 + IMU 外参
   if (estimate_temporal_extrinsics_)
   {
     extrinsics_id = changeIdType(nframe_id, IdType::Extrinsics, cam_idx);
@@ -103,9 +102,9 @@ inline ceres::ResidualBlockId Estimator::addObservation(const FramePtr &frame,
   ceres::ResidualBlockId ret_val = map_ptr_->addResidualBlock(
         reprojection_error,
         cauchy_loss_function_ptr_ ? cauchy_loss_function_ptr_.get() : nullptr,
-        map_ptr_->parameterBlockPtr(nframe_id.asInteger()),
-        map_ptr_->parameterBlockPtr(landmark_backend_id.asInteger()),
-        map_ptr_->parameterBlockPtr(extrinsics_id.asInteger()));
+        map_ptr_->parameterBlockPtr(nframe_id.asInteger()), // frame_bundle 体坐标系的位姿
+        map_ptr_->parameterBlockPtr(landmark_backend_id.asInteger()), // 路标 3D 点
+        map_ptr_->parameterBlockPtr(extrinsics_id.asInteger())); // 体坐标系到相机坐标系的外参 + IMU 外参
 
   // remember
   landmarks_map_.at(landmark_backend_id).observations.insert(

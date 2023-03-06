@@ -276,17 +276,22 @@ bool FrameHandlerBase::addFrameBundle(const FrameBundlePtr& frame_bundle)
     VLOG(40) << "Load map and motion prior from backend.";
     if (backend_reinit_)
     {
+      // 用最近后端优化出来的结果设置状态变量
       bundle_adjustment_->setReinitStartValues(speed_bias_backend_latest_,
                                                T_WS_backend_latest_,
                                                timestamp_backend_latest_);
     }
 
+    /// 会基于 IMU 递推，设置当前帧的位姿先验
+    /// 实质上设置优化状态和残差的地方，只设置了 IMU 因子
+    /// 将 ceres 优化后的状态同步到前端，通过 active_keyframes_
     bundle_adjustment_->loadMapFromBundleAdjustment(new_frames_,
                                                     last_frames_, map_,
                                                     have_motion_prior_);
 
     if (bundle_adjustment_->getNumFrames() > 0 && have_motion_prior_)
     {
+      // 记录最近一次的优化状态，上面 reinit 时会用到
       bundle_adjustment_->getLatestSpeedBiasPose(
             &speed_bias_backend_latest_, &T_WS_backend_latest_,
             &timestamp_backend_latest_);
@@ -314,7 +319,7 @@ bool FrameHandlerBase::addFrameBundle(const FrameBundlePtr& frame_bundle)
   }
 
   // handle motion prior
-  if (have_motion_prior_) // 这个分支怎么感觉进不去？？？ have_motion_prior_ 总会被reset成false
+  if (have_motion_prior_)
   {
     have_rotation_prior_ = true;
     R_imu_world_ = new_frames_->get_T_W_B().inverse().getRotation(); // 这块在一开始已经被IMU更新了
@@ -397,6 +402,7 @@ bool FrameHandlerBase::addFrameBundle(const FrameBundlePtr& frame_bundle)
     }
 #endif
     VLOG(40) << "Call bundle adjustment.";
+    // 运行后端
     bundle_adjustment_->bundleAdjustment(new_frames_);
   }
 

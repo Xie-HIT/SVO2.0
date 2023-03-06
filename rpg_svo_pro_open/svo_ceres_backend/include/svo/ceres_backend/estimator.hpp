@@ -727,9 +727,8 @@ class Estimator
   bool setSpeedAndBiasEstimate(BackendId id, const SpeedAndBias& sab);
 
   CameraBundlePtr camera_rig_;
-  //! If we do not estimate extrinsics, then these are the parameter block IDs
-  //! for all extrinsics.
-  std::vector<BackendId> constant_extrinsics_ids_;
+  //! If we do not estimate extrinsics, then these are the parameter block IDs for all extrinsics.
+  std::vector<BackendId> constant_extrinsics_ids_; // vector 的大小是多相机的数目
   bool estimate_temporal_extrinsics_ {false};
 
   // the following keeps track of all states at different times (key=poseId)

@@ -307,6 +307,7 @@ protected:
   bool skip_optimization_once_ = false;
 
   /// keyframes that are contained in backend. Oldest keyframe in front
+  /// 通过边缘化维持与前端 Map 中的关键帧数量一致
   std::deque<FramePtr> active_keyframes_;
 
   // visualization

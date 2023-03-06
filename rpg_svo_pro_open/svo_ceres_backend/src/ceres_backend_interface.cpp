@@ -96,10 +96,12 @@ void CeresBackendInterface::loadMapFromBundleAdjustment(
   }
 
   // Adding new state to backend ---------------------------------------------
+  /// 设置位姿和 IMU 状态，获取上一帧的后端位姿估计，进行 IMU 递推作为初始值，加入 IMU 因子
   if (addStatesAndInertialMeasurementsToBackend(new_frames))
   {
     last_added_nframe_imu_ = new_frames->getBundleId();
 
+    // 更新 IMU 递推到当前帧位姿，注意 new_frames 是 frame_bundle，多相机都按照到 IMU 的外参更新了，这个外参就是 yaml 文件的 T_B_C
     // Obtain motion prior ---------------------------------------------------
     updateBundleStateWithBackend(new_frames, true);
     have_motion_prior = true;
@@ -126,7 +128,7 @@ void CeresBackendInterface::loadMapFromBundleAdjustment(
     return;
   }
 
-  // Update SVO Map ----------------------------------------------------------
+  // Update SVO Map（即指前端地图：active_keyframes_） ----------------------------------------------------------
   {
     Transformation T_WS;
     // Statistics
@@ -140,7 +142,7 @@ void CeresBackendInterface::loadMapFromBundleAdjustment(
     for (FramePtr& keyframe : active_keyframes_) // 注意 keyframe 是个引用，该循环之后 active_keyframes_ 已变
     {
       DEBUG_CHECK(keyframe) << "Found nullptr keyframe";
-      updateFrameStateWithBackend(keyframe, false);
+      updateFrameStateWithBackend(keyframe, false); // 把 ceres 优化后的状态赋给 active_keyframes_ 中的内容，猜测其与前端的 keyframe 有关（即为前端的地图）
       n_frames_updated++;
     }
     VLOG(3) << "Updated " << n_frames_updated << " frames in map.";
@@ -157,7 +159,7 @@ void CeresBackendInterface::loadMapFromBundleAdjustment(
     {
       if (!last_frame->isKeyframe())
       {
-        updateFrameStateWithBackend(last_frame, true);
+        updateFrameStateWithBackend(last_frame, true); // 若上一帧不是关键帧，也将 ceres 优化后的状态更新给它
       }
     }
 
@@ -182,8 +184,7 @@ void CeresBackendInterface::loadMapFromBundleAdjustment(
       }
     }
 
-    // The following is not used for the algorithm to work, but updated for
-    // completeness.
+    // The following is not used for the algorithm to work, but updated for completeness.
     SpeedAndBias speed_and_bias;
     bool success =
         backend_.getSpeedAndBias(last_frames->getBundleId(), speed_and_bias);
@@ -234,6 +235,8 @@ void CeresBackendInterface::bundleAdjustment(const FrameBundlePtr& frame_bundle)
       {
         image_motion_detector_stationary_ = true;
         VLOG(5) << "Image is not moving: adding zero velocity prior.";
+
+        // 设置零速度先验因子，可能对无人机悬停有作用
         if (!backend_.addVelocityPrior(
                 createNFrameId(frame_bundle->getBundleId()),
                 Eigen::Matrix<FloatType, 3, 1>::Zero(), sigma))
@@ -272,6 +275,8 @@ void CeresBackendInterface::bundleAdjustment(const FrameBundlePtr& frame_bundle)
     }
   }
 
+  /// 设置 landmark 状态（关键帧中，新关联上的深度滤波器收敛的点），采用 3D 点形式
+  /// 为每一帧加入重投影因子
   // Adding new landmarks to backend -----------------------------------------
   size_t num_new_observations = 0;
   for (FramePtr& frame : *frame_bundle)
@@ -279,7 +284,7 @@ void CeresBackendInterface::bundleAdjustment(const FrameBundlePtr& frame_bundle)
     if (frame->isKeyframe())
     {
       backend_.setKeyframe(createNFrameId(frame->bundleId()), true);
-      active_keyframes_.push_back(frame);
+      active_keyframes_.push_back(frame); /// 关键帧加入 active_keyframes_
       addLandmarksAndObservationsToBackend(frame);
     }
     else
@@ -331,6 +336,8 @@ void CeresBackendInterface::bundleAdjustment(const FrameBundlePtr& frame_bundle)
   {
     g_permon_backend_->log("pre_optim_time", timer.stop());
   }
+
+  /// 执行后端 BA 的 Solve 函数
   wait_condition_.notify_one();
 }
 
@@ -361,7 +368,7 @@ void CeresBackendInterface::addLandmarksAndObservationsToBackend(
     }
 
     // check if landmark was already in to backend, if yes just add observation.
-    if (backend_.isPointInEstimator(point->id()))
+    if (backend_.isPointInEstimator(point->id())) // 如果是老地图点，就不增加 landmark 状态了
     {
       ++n_features_already_in_backend;
       if (!backend_.addObservation(frame, kp_idx))
@@ -417,6 +424,7 @@ void CeresBackendInterface::addLandmarksAndObservationsToBackend(
             std::make_pair(kp_idx, point->obs_.size()));
         continue;
       }
+      // 如果前面条件都满足，就增加一个 landmark 状态，这样的新点是由此帧新关联上的深度滤波器收敛的点组成的
       if (!backend_.addLandmark(point, false))
       {
         LOG(ERROR) << "Failed to add a landmark!";
@@ -445,6 +453,7 @@ void CeresBackendInterface::addLandmarksAndObservationsToBackend(
   for (size_t idx = 0; idx < kp_idx_to_n_obs_map_fixed_lm.size(); idx++)
   {
     const size_t cur_kp_idx = kp_idx_to_n_obs_map_fixed_lm[idx].first;
+    // 这些点不动，位姿可优化
     backend_.addLandmark(frame->landmark_vec_[cur_kp_idx], true);
     backend_.addObservation(frame, cur_kp_idx);
     n_added_fixed_lm++;
@@ -478,13 +487,14 @@ bool CeresBackendInterface::addStatesAndInertialMeasurementsToBackend(
   const double current_frame_bundle_stamp =
       frame_bundle->getMinTimestampSeconds();
 
+  // 图像先到的话要等一下 IMU 数据，没有等到 IMU 数据这帧就没有运动先验了
   if (!imu_handler_->waitTill(current_frame_bundle_stamp))
   {
     return false;
   }
 
-  // Get measurements, newest is interpolated to exactly match timestamp of
-  // frame_bundle
+  // 获得从上一帧到当前帧的 IMU 数据 imu_measurements
+  // Get measurements, newest is interpolated to exactly match timestamp of frame_bundle
   if (!imu_handler_->getMeasurementsContainingEdges(current_frame_bundle_stamp,
                                                     imu_measurements, true))
   {
@@ -496,6 +506,7 @@ bool CeresBackendInterface::addStatesAndInertialMeasurementsToBackend(
   }
 
   // introduce a state for the frame in the backend --------------------------
+  // 加入状态和 IMU 因子
   if (!backend_.addStates(frame_bundle, imu_measurements,
                           current_frame_bundle_stamp))
   {
@@ -690,6 +701,7 @@ void CeresBackendInterface::optimizationLoop()
         }
         else
         {
+          //! 后端优化
           backend_.optimize(optimizer_options_.num_iterations,
                             optimizer_options_.num_threads,
                             optimizer_options_.verbose);

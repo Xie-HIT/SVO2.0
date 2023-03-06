@@ -98,7 +98,7 @@ fi
     /svo/pose_imu --out=stamped_traj_estimate.txt
 
   # copy groundtruth to evaluate directory
-  cp $EVALUATE_OUTPUT_DIR/../stamped_groundtruth.txt $WORK_DIR
+  cp $EVALUATE_OUTPUT_DIR/../groundtruth/$var/stamped_groundtruth.txt $WORK_DIR
 
   # evaluate
   cd $WORK_DIR || exit; evo_ape tum stamped_groundtruth.txt stamped_traj_estimate.txt -vap

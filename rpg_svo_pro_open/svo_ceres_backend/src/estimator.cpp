@@ -160,6 +160,7 @@ bool Estimator::addStates(const FrameBundleConstPtr& frame_bundle,
       last_timestamp = reinit_timestamp_start_;
       speed_and_bias = reinit_speed_bias_;
       T_WS = reinit_T_WS_;
+      // IMU 递推
       int num_used_imu_measurements =
           ceres_backend::ImuError::propagation(
             imu_measurements, imu_parameters_.at(0), T_WS, speed_and_bias,
@@ -198,6 +199,7 @@ bool Estimator::addStates(const FrameBundleConstPtr& frame_bundle,
             speed_and_bias_id.asInteger()))->estimate();
     //! @todo last_timestamp redundant because we already select imu
     //!       measurements for specific timespan
+    // IMU 递推，得到当前状态的初始值
     int num_used_imu_measurements =
         ceres_backend::ImuError::propagation(
           imu_measurements, imu_parameters_.at(0), T_WS, speed_and_bias,
@@ -216,6 +218,7 @@ bool Estimator::addStates(const FrameBundleConstPtr& frame_bundle,
   DEBUG_CHECK(!states_.findSlot(nframe_id).second)
       << "pose ID" << nframe_id << " was used before!";
 
+  // 把当前帧位姿加入 ceres 优化状态
   // add the pose states
   std::shared_ptr<ceres_backend::PoseParameterBlock> pose_parameter_block =
       std::make_shared<ceres_backend::PoseParameterBlock>(T_WS, nframe_id.asInteger());
@@ -225,6 +228,8 @@ bool Estimator::addStates(const FrameBundleConstPtr& frame_bundle,
     return false;
   }
   states_.addState(nframe_id, false, timestamp);
+
+  // 把当前帧的 IMU 状态加入 ceres 优化状态
   // add IMU states
   for (size_t i=0; i<imu_parameters_.size(); ++i)
   {
@@ -242,6 +247,7 @@ bool Estimator::addStates(const FrameBundleConstPtr& frame_bundle,
   // Now we deal with error terms
   CHECK_GE(states_.ids.size(), 1u);
 
+  // 加入 IMU 因子
   // add initial prior or IMU errors
   if (states_.ids.size() == 1)
   {
@@ -252,10 +258,11 @@ bool Estimator::addStates(const FrameBundleConstPtr& frame_bundle,
     information(1,1) = 1.0e8;
     information(2,2) = 1.0e8;
     std::shared_ptr<ceres_backend::PoseError > pose_error =
-        std::make_shared<ceres_backend::PoseError>(T_WS, information);
+        std::make_shared<ceres_backend::PoseError>(T_WS, information); // 先验位姿残差
     map_ptr_->addResidualBlock(pose_error, nullptr, pose_parameter_block);
     registerFixedFrame(pose_parameter_block->id());
 
+    // IMU 残差
     for (size_t i = 0; i < imu_parameters_.size(); ++i)
     {
       // get these from parameter file
@@ -274,6 +281,7 @@ bool Estimator::addStates(const FrameBundleConstPtr& frame_bundle,
   }
   else
   {
+    // IMU 预积分因子
     const BackendId last_nframe_id = states_.ids[states_.ids.size() - 2];
     for (size_t i = 0; i < imu_parameters_.size(); ++i)
     {
@@ -294,6 +302,7 @@ bool Estimator::addStates(const FrameBundleConstPtr& frame_bundle,
     }
   }
 
+  // 如果估计相机和 IMU 之间的外参，就设为 ceres 优化状态
   // Now deal with extrinsics
   // At the beginning or changing extrinsics, we add new parameter
   // for the extrinsics; otherwise we only keep one set of extrinsics
@@ -302,7 +311,7 @@ bool Estimator::addStates(const FrameBundleConstPtr& frame_bundle,
   {
     for (size_t i = 0; i < extrinsics_estimation_parameters_.size(); ++i)
     {
-      const Transformation T_S_C = camera_rig_->get_T_C_B(i).inverse();
+      const Transformation T_S_C = camera_rig_->get_T_C_B(i).inverse(); // 相机到体坐标系外参的初始值
       cur_bundle_extrinsics_ids[i] = changeIdType(nframe_id, IdType::Extrinsics, i);
       std::shared_ptr<ceres_backend::PoseParameterBlock> extrinsics_parameter_block =
           std::make_shared<ceres_backend::PoseParameterBlock>(
@@ -315,7 +324,7 @@ bool Estimator::addStates(const FrameBundleConstPtr& frame_bundle,
     }
     if (!estimate_temporal_extrinsics_)
     {
-      constant_extrinsics_ids_ = cur_bundle_extrinsics_ids;
+      constant_extrinsics_ids_ = cur_bundle_extrinsics_ids; /// 写入 ！
     }
   }
 
@@ -332,6 +341,8 @@ bool Estimator::addStates(const FrameBundleConstPtr& frame_bundle,
       else
       {
         const Transformation T_SC = camera_rig_->get_T_C_B(i).inverse();
+
+        // 加入外参的先验误差
         std::shared_ptr<ceres_backend::PoseError > camera_pose_error =
             std::make_shared<ceres_backend::PoseError>(T_SC,
               extrinsics_estimation_parameters_[i].absoluteTranslationVar(),
@@ -361,6 +372,8 @@ bool Estimator::addStates(const FrameBundleConstPtr& frame_bundle,
         double rotation_sigma_c =
             extrinsics_estimation_parameters_[i].sigma_c_relative_orientation;
         double rotation_variance = rotation_sigma_c * rotation_sigma_c * dt;
+
+        // 加入外参的保持因子：两帧的外参不随时间发生变化，它们之间作差
         std::shared_ptr<ceres_backend::RelativePoseError> relative_extrinsics_error =
             std::make_shared<ceres_backend::RelativePoseError>(translation_variance,
                                                       rotation_variance);
@@ -385,6 +398,7 @@ bool Estimator::addLandmark(const PointPtr &landmark,
   // track id is the same as point id
   BackendId landmark_backend_id = createLandmarkId(landmark->id());
 
+  // 加入路标点的状态
   std::shared_ptr<ceres_backend::HomogeneousPointParameterBlock>
       point_parameter_block =
       std::make_shared<ceres_backend::HomogeneousPointParameterBlock>(
@@ -627,6 +641,7 @@ bool vectorContains(const std::vector<T>& vector, const T & query)
   return false;
 }
 
+/// 后端 Map 组成：[前端关键帧 + [当前帧附件的一小段普通帧]]
 // Applies the dropping/marginalization strategy according to the RSS'13/IJRR'14 paper.
 // The new number of frames in the window will be numKeyframes+numImuFrames.
 bool Estimator::applyMarginalizationStrategy(
@@ -667,7 +682,7 @@ bool Estimator::applyMarginalizationStrategy(
 
   // these will keep track of what we want to marginalize out.
   //! @todo keepParameterBlocks could be removed. Only 'false' is pushed back..
-  std::vector<uint64_t> parameter_blocks_to_be_marginalized;
+  std::vector<uint64_t> parameter_blocks_to_be_marginalized; // 待舍弃的状态们
   std::vector<bool> keep_parameter_blocks;
 
   if (!hasPrior())
@@ -676,8 +691,8 @@ bool Estimator::applyMarginalizationStrategy(
   }
 
   // distinguish if we marginalize everything or everything but pose
-  std::vector<BackendId> marginalize_pose_frames;
-  std::vector<BackendId> marginalize_all_but_pose_frames;
+  std::vector<BackendId> marginalize_pose_frames; // 待边缘的帧：不需要的普通帧
+  std::vector<BackendId> marginalize_all_but_pose_frames; // 在 IMU window（一个当前帧附件的普通帧窗口）之外的帧，只保留位姿
   std::vector<BackendId> all_linearized_frames;
   size_t counted_keyframes = 0;
   // Note: rit is now pointing to the first frame not in the sliding window
@@ -689,11 +704,11 @@ bool Estimator::applyMarginalizationStrategy(
     //   * the oldest keyframe when we have enough keyframe
     if (!(*rit_keyframe) || counted_keyframes >= num_keyframes)
     {
-      marginalize_pose_frames.push_back(*rit_id);
+      marginalize_pose_frames.push_back(*rit_id); // imu窗口外的普通帧就不要了
     }
     else
     {
-      counted_keyframes++;
+      counted_keyframes++; // 超出前端关键帧数量 num_keyframes 的普通帧 + 关键帧都会被舍弃
     }
 
     // for all the frames outside the IMU window, we only keep the pose
@@ -812,6 +827,7 @@ bool Estimator::applyMarginalizationStrategy(
     // the observations are deleted. If it is, then the landmarks visible in
     // the oldest keyframe but not the newest one are marginalized.
     {
+      /// 边缘化 landmark
       for(PointMap::iterator pit = landmarks_map_.begin();
           pit != landmarks_map_.end();)
       {

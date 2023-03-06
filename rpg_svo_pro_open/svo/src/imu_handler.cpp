@@ -143,6 +143,8 @@ bool ImuHandler::getMeasurementsContainingEdges(
     return false;
   }
 
+  // measurements_ 只保留用于插值的 IMU 数据：it, it+1
+  // 注意之前的 IMU 数据都存在了 extracted_measurements，可用于预积分
   if (remove_measurements)
   {
     // delete measurements that will not be used anymore (such that we keep it+1,
@@ -585,14 +587,14 @@ IMUTemporalStatus ImuHandler::checkTemporalStatus(const double time_sec)
 }
 
 bool ImuHandler::waitTill(const double img_timestamp_sec,
-                          const double timeout_sec)
+                          const double timeout_sec /* 0.1 */)
 {
   vk::Timer wait_time;
   wait_time.start();
   while (this->getLatestTimestamp() <
          img_timestamp_sec - this->imu_calib_.delay_imu_cam)
   {
-    if (wait_time.stop() > timeout_sec)
+    if (wait_time.stop() > timeout_sec) // 超过 100 ms 没等到 IMU 数据就返回 false
     {
       LOG(ERROR) << "Did not get IMU measurements";
       return false;

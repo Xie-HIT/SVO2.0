@@ -22,8 +22,7 @@ bool MotionDetector::isImageMoving(double &sigma) const
   // find correspondences between last and new frame
   Keypoints features_last(2, opt_.max_features_to_check);
   Keypoints features_new(2, opt_.max_features_to_check);
-  int num_correspondences = findFeatureCorrespondences(features_last,
-                                                               features_new);
+  int num_correspondences = findFeatureCorrespondences(features_last, features_new);
 
   if(num_correspondences < opt_.min_number_correspondences)
   {
@@ -89,14 +88,28 @@ bool MotionDetector::findFeatureCorrespondence(const size_t cam_index,
                                                const int track_id,
                                                Keypoint *last_px) const
 {
+  // TODO (xie chen): 避免重定位时候 last_frames_ 不是自然排序
+  int cor_cam_index = -1;
+  for(size_t i=0; i<last_frames_->frames_.size(); ++i)
+  {
+    FramePtr last_frame = last_frames_->frames_[i];
+    if(last_frame->getNFrameIndex() == static_cast<int>(cam_index))
+      cor_cam_index = i;
+  }
+  if(cor_cam_index == -1)
+    return false;
+
   //find the matching track ID in last frames
   const int num_features =
-      static_cast<int>(last_frames_->at(cam_index)->numFeatures());
+      static_cast<int>(last_frames_->at(cor_cam_index)->numFeatures());
   for(int i = 0; i<num_features; ++i)
   {
-    if(last_frames_->at(cam_index)->track_id_vec_[i] == track_id)
+    // FIXME (xie chen)：一个莫名其妙的越界问题，已解决，BUG in initializeSeeds() in depth_filter.cpp
+    assert(i < last_frames_->at(cor_cam_index)->track_id_vec_.size());
+
+    if(last_frames_->at(cor_cam_index)->track_id_vec_[i] == track_id)
     {
-      *last_px = last_frames_->at(cam_index)->px_vec_.col(i);
+      *last_px = last_frames_->at(cor_cam_index)->px_vec_.col(i);
       return true;
     }
   }
