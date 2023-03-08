@@ -50,7 +50,7 @@ then
 fi
 
 # check dataset exist and run them
-for var in "Quad-Easy" # "Quad-Medium" "Quad-Hard"
+for var in "Quad-Hard" # "Quad-Medium" "Quad-Hard"
 do
   WORK_DIR=$EVALUATE_OUTPUT_DIR/$var
 

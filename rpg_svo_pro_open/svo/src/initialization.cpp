@@ -114,6 +114,39 @@ bool AbstractInitialization::trackFeaturesAndCheckDisparity(const FrameBundlePtr
   return true;
 }
 
+bool AbstractInitialization::trackFeaturesAndCheckDisparity_v2(const FrameBundlePtr& frames)
+{
+  /// track features
+  tracker_->trackFrameBundle_v2(frames); // TODO
+
+  /// check disparity
+  size_t num_tracked_tot;
+  double avg_disparity;
+  tracker_->getNumTrackedAndDisparityPerFrame_v2(
+          options_.init_disparity_pivot_ratio, num_tracked_tot, avg_disparity);
+
+  VLOG(3) << "Init: Tracked " << num_tracked_tot << " features with disparity = " << avg_disparity;
+
+  /// reset: initialize new tracks
+  if(num_tracked_tot < options_.init_min_features)
+  {
+    tracker_->resetActiveTracks_v2();
+    for(const FramePtr& frame : frames->frames_)
+      frame->clearFeatureStorage();
+    const size_t n = tracker_->initializeNewTracks_v2(frames); // TODO
+    VLOG(3) << "Init: New Tracks initialized = " << n;
+    frames_ref_ = frames;
+    R_ref_world_ = R_cur_world_;
+    return false;
+  }
+
+  if(avg_disparity < options_.init_min_disparity)
+    return false;
+
+  return true;
+}
+
+
 InitResult HomographyInit::addFrameBundle(
     const FrameBundlePtr& frames_cur)
 {
@@ -352,6 +385,82 @@ InitResult FivePointInit::addFrameBundle(
   if(initialization_utils::triangulateAndInitializePoints(
         frames_cur->at(0), frames_ref->at(0), T_cur_from_ref_, options_.reproj_error_thresh,
         depth_at_current_frame_, options_.init_min_inliers, matches_cur_ref))
+  {
+    return InitResult::kSuccess;
+  }
+  return InitResult::kFailure;
+
+#else
+  SVO_ERROR_STREAM("You need to compile SVO with OpenGV to use TwoPointInit!");
+  return InitResult::kFailure;
+#endif
+}
+
+InitResult FivePointInit::addFrameBundle_v2(
+        const FrameBundlePtr& frames_cur)
+{
+#ifdef SVO_USE_OPENGV
+  std::cout << "=========================== FivePointInit ===========================" << std::endl;
+
+  // Track and detect features.
+  if(!trackFeaturesAndCheckDisparity_v2(frames_cur))
+    return InitResult::kTracking;
+
+  std::cout << "=========================== End of debug ===========================" << std::endl;
+  exit(0);
+
+  // Create vector of bearing vectors
+  const FrameBundlePtr frames_ref = tracker_->getOldestFrameInTrack(0);
+  FeatureMatches matches_cur_ref; // 匹配的角点对
+  feature_tracking_utils::getFeatureMatches(
+          *frames_cur->at(0), *frames_ref->at(0), &matches_cur_ref);
+
+  // Create vector of bearing vectors
+  BearingVectors f_cur;
+  BearingVectors f_ref;
+  initialization_utils::copyBearingVectors(
+          *frames_cur->at(0), *frames_ref->at(0), matches_cur_ref, &f_cur, &f_ref);
+
+  // Compute model
+  // RANSAC五点法计算相对位姿（调用OpenGV的库）
+  static double inlier_threshold = 1.0 - std::cos(frames_cur->at(0)->getAngleError(options_.reproj_error_thresh));
+  typedef opengv::sac_problems::relative_pose::CentralRelativePoseSacProblem CentralRelative;
+  opengv::relative_pose::CentralRelativeAdapter adapter(f_cur, f_ref);
+  std::shared_ptr<CentralRelative> problem_ptr(
+          new CentralRelative(adapter, CentralRelative::NISTER));
+  opengv::sac::Ransac<CentralRelative> ransac;
+  ransac.sac_model_ = problem_ptr;
+  ransac.threshold_ = inlier_threshold;
+  ransac.max_iterations_ = 100;
+  ransac.probability_ = 0.995;
+  ransac.computeModel(); // 计算
+
+  // enough inliers?
+  if(ransac.inliers_.size() < options_.init_min_inliers)
+  {
+    VLOG(3) << "5Pt RANSAC has only " << ransac.inliers_.size() << " inliers. "
+            << options_.init_min_inliers << " required.";
+    return InitResult::kNoKeyframe;
+  }
+
+  Eigen::Vector3d t = ransac.model_coefficients_.rightCols(1);
+  Matrix3d R = ransac.model_coefficients_.leftCols(3);
+  T_cur_from_ref_ = Transformation(
+          Quaternion(R),
+          ransac.model_coefficients_.rightCols(1));
+
+  VLOG(5) << "5Pt RANSAC:" << std::endl
+          << "# Iter = " << ransac.iterations_ << std::endl
+          << "# Inliers = " << ransac.inliers_.size() << std::endl
+          << "Model = " << ransac.model_coefficients_ << std::endl
+          << "T.rotation_matrix() = " << T_cur_from_ref_.getRotationMatrix() << std::endl
+          << "T.translation() = " << T_cur_from_ref_.getPosition();
+
+  // Triangulate
+  // 五点法成功则进行三角化
+  if(initialization_utils::triangulateAndInitializePoints(
+          frames_cur->at(0), frames_ref->at(0), T_cur_from_ref_, options_.reproj_error_thresh,
+          depth_at_current_frame_, options_.init_min_inliers, matches_cur_ref))
   {
     return InitResult::kSuccess;
   }

@@ -45,7 +45,12 @@ UpdateResult FrameHandlerMono::processFrameBundle()
   }
   else if(stage_ == Stage::kInitializing)
   {
+#if 1
     res = processFirstFrame();
+#else
+    // TODO (xie chen): leave to future work
+    res = processFirstFrame_v2();
+#endif
   }
   else if(stage_ == Stage::kRelocalization)
   {
@@ -109,6 +114,67 @@ UpdateResult FrameHandlerMono::processFirstFrame()
           << ", max: " << depth_max_ << ", median: " << depth_median_;
   depth_filter_->addKeyframe(
               newFrame(), depth_median_[0], 0.5*depth_min_[0], depth_median_[0]*1.5); // 将当前帧选为关键帧
+  VLOG(40) << "Updating seeds in second frame using last frame...";
+  depth_filter_->updateSeeds({ newFrame() }, lastFrameUnsafe()); // 用上一帧去更新当前关键帧
+
+  // add frame to map
+  map_->addKeyframe(newFrame(),
+                    bundle_adjustment_type_==BundleAdjustmentType::kCeres);
+  stage_ = Stage::kTracking;
+  tracking_quality_ = TrackingQuality::kGood;
+  initializer_->reset();
+  VLOG(1) << "Init: Selected second frame, triangulated initial map.";
+  return UpdateResult::kKeyframe;
+}
+
+UpdateResult FrameHandlerMono::processFirstFrame_v2()
+{
+  if(!initializer_->have_depth_prior_)
+  {
+    initializer_->setDepthPrior(options_.init_map_scale); // 先验尺度
+  }
+  if(have_rotation_prior_)
+  {
+    VLOG(2) << "Setting absolute orientation prior";
+    initializer_->setAbsoluteOrientationPrior(
+            newFrame()->T_cam_imu().getRotation() * R_imu_world_);
+  }
+
+  /// 初始化
+  const auto res = initializer_->addFrameBundle_v2(new_frames_);
+
+  // 积累初始化窗口，什么也不做
+  if(res == InitResult::kTracking)
+    return UpdateResult::kDefault;
+
+  // make old frame keyframe
+  initializer_->frames_ref_->setKeyframe();
+  initializer_->frames_ref_->at(0)->setKeyframe();
+  if(bundle_adjustment_type_==BundleAdjustmentType::kCeres)
+  {
+    map_->addKeyframe(initializer_->frames_ref_->at(0),
+                      bundle_adjustment_type_==BundleAdjustmentType::kCeres);
+  }
+  else if(bundle_adjustment_type_==BundleAdjustmentType::kGtsam)
+  {
+    CHECK(bundle_adjustment_)
+    << "bundle_adjustment_type_ is kGtsam but bundle_adjustment_ is NULL";
+    bundle_adjustment_->bundleAdjustment(initializer_->frames_ref_);
+  }
+  else
+  {
+    map_->addKeyframe(initializer_->frames_ref_->at(0), false);
+  }
+  // make new frame keyframe
+  newFrame()->setKeyframe();
+  if(!frame_utils::getSceneDepth(newFrame(),depth_median_[0], depth_min_[0], depth_max_[0]))
+  {
+    depth_min_[0] = 0.2; depth_median_[0] = 3.0; depth_max_[0] = 100;
+  }
+  VLOG(40) << "Current Frame Depth: " << "min: " << depth_min_
+  << ", max: " << depth_max_ << ", median: " << depth_median_;
+  depth_filter_->addKeyframe(
+          newFrame(), depth_median_[0], 0.5*depth_min_[0], depth_median_[0]*1.5); // 将当前帧选为关键帧
   VLOG(40) << "Updating seeds in second frame using last frame...";
   depth_filter_->updateSeeds({ newFrame() }, lastFrameUnsafe()); // 用上一帧去更新当前关键帧
 

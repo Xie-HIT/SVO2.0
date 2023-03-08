@@ -103,6 +103,9 @@ protected:
   /// Processes the first frame and sets it as a keyframe.
   virtual UpdateResult processFirstFrame();
 
+  /// TODO (xie chen): our implement
+  virtual UpdateResult processFirstFrame_v2();
+
   /// Processes all frames after the first two keyframes.
   virtual UpdateResult processFrame();
 

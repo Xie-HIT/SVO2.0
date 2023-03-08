@@ -46,8 +46,7 @@ class FeatureRef
 public:
   FeatureRef() = delete;
 
-  FeatureRef(
-      const FrameBundlePtr& frame_bundle, size_t frame_index, size_t feature_index);
+  FeatureRef(const FrameBundlePtr& frame_bundle, size_t frame_index, size_t feature_index);
 
   inline const FrameBundlePtr getFrameBundle() const {
     return frame_bundle_;
@@ -72,8 +71,44 @@ private:
   size_t frame_index_;
   size_t feature_index_;
 };
-
 typedef std::vector<FeatureRef> FeatureRefList;
+
+// TODO (xie chen): one 3D point <-> one frame_bundle <-> multiple cameras / features
+class FeatureRef_v2
+{
+public:
+  FeatureRef_v2() = delete;
+
+  FeatureRef_v2(const FrameBundlePtr& frame_bundle,
+                const std::vector<size_t>& frames_index, const std::vector<size_t>& features_index);
+
+  inline const FrameBundlePtr getFrameBundle() const {
+    return frame_bundle_;
+  }
+
+  inline size_t size() const
+  {
+    return frames_index_.size();
+  }
+
+  inline size_t getFramesIndex(size_t id) const {
+    return frames_index_[id];
+  }
+
+  inline size_t getFeaturesIndex(size_t id) const {
+    return features_index_[id];
+  }
+
+  const Eigen::Block<Keypoints, 2, 1> getPx(size_t frame_id) const;
+
+
+private:
+  size_t frame_bundle_id_;
+  FrameBundlePtr frame_bundle_;
+  std::vector<size_t> frames_index_;
+  std::vector<size_t> features_index_;
+};
+typedef std::vector<FeatureRef_v2> FeatureRefList_v2;
 
 
 // -----------------------------------------------------------------------------
@@ -132,5 +167,50 @@ private:
   FeatureRefList feature_track_;
 };
 typedef std::vector<FeatureTrack, Eigen::aligned_allocator<FeatureTrack> > FeatureTracks;
+
+// TODO (xie chen): track <-> frame_bundle
+class FeatureTrack_v2
+{
+public:
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+  inline int getTrackId() const {
+    return track_id_;
+  }
+
+  inline size_t size() const {
+    return feature_track_.size();
+  }
+
+  inline bool empty() const {
+    return feature_track_.empty();
+  }
+
+  inline const FeatureRef_v2& front() const {
+    CHECK(!empty()) << "Track empty when calling front().";
+    return feature_track_.front();
+  }
+
+  inline const FeatureRef_v2& back() const {
+    CHECK(!empty()) << "Track empty when calling back().";
+    return feature_track_.back();
+  }
+
+  inline void pushBack(
+          const FrameBundlePtr& frame_bundle,
+          const std::vector<size_t>& frames_index,
+          const std::vector<size_t>& features_index) {
+    feature_track_.emplace_back(FeatureRef_v2(frame_bundle, frames_index, features_index));
+  }
+
+  double getDisparity() const;
+
+private:
+  int track_id_;
+  FeatureRefList_v2 feature_track_;
+};
+typedef std::vector<FeatureTrack_v2, Eigen::aligned_allocator<FeatureTrack_v2> > FeatureTracks_v2;
+
+
 
 } // namespace svo

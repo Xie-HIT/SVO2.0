@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include <iostream>
 #include <svo/common/types.h>
 #include <svo/common/transformation.h>
 #include <svo/common/camera_fwd.h>
@@ -125,8 +126,14 @@ public:
   virtual ~AbstractInitialization();
 
   bool trackFeaturesAndCheckDisparity(const FrameBundlePtr& frames);
+  bool trackFeaturesAndCheckDisparity_v2(const FrameBundlePtr& frames);
 
   virtual InitResult addFrameBundle(const FrameBundlePtr& frames_cur) = 0;
+  virtual InitResult addFrameBundle_v2(const FrameBundlePtr& frames_cur)
+  {
+    std::cout << "Not implement yet!" << std::endl;
+    exit(0);
+  }
 
   virtual void reset();
 
@@ -181,6 +188,9 @@ public:
 
   virtual InitResult addFrameBundle(
       const FrameBundlePtr& frames_cur) override;
+
+  virtual InitResult addFrameBundle_v2(
+          const FrameBundlePtr& frames_cur) override;
 };
 
 /// Assumes horizontal ground and given depth. Initializes all features in the

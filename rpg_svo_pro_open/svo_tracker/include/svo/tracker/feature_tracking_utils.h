@@ -13,6 +13,10 @@ double getTracksDisparityPercentile(
     const FeatureTracks& tracks,
     double pivot_ratio);
 
+double getTracksDisparityPercentile_v2(
+        const FeatureTracks_v2& tracks,
+        double pivot_ratio);
+
 /// Loops through TrackIds and checks if two frames have tracks in common.
 void getFeatureMatches(
     const Frame& frame1, const Frame& frame2,
