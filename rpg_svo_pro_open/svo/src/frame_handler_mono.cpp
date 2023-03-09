@@ -214,12 +214,11 @@ UpdateResult FrameHandlerMono::processFrame()
 
   // STEP 1: Sparse Image Align
   VLOG(40) << "===== Sparse Image Alignment =====";
-  size_t n_total_observations = 0;
   sparseImageAlignment();
 
   // STEP 2: Map Reprojection & Feature Align
   VLOG(40) << "===== Project Map to Current Frame =====";
-  n_total_observations = projectMapInFrame();
+  size_t n_total_observations = projectMapInFrame();
   if(n_total_observations < options_.quality_min_fts)
   {
     LOG(WARNING) << "Not enough feature after reprojection: "
@@ -242,6 +241,7 @@ UpdateResult FrameHandlerMono::processFrame()
     optimizeStructure(new_frames_, options_.structure_optimization_max_pts, 5);
   }
 
+  // 跟踪不足的话，下面函数会报：Lost XX Features
   // return if tracking bad
   setTrackingQuality(n_total_observations);
   if(tracking_quality_ == TrackingQuality::kInsufficient)

@@ -93,14 +93,20 @@ fi
   sleep 5s
 
   # transform to TUM format
-  rosrun rpg_trajectory_evaluation bag_to_pose.py \
-    $WORK_DIR/Evaluate-$var.bag \
-    /svo/pose_imu --out=stamped_traj_estimate.txt
+  if ! [ -e $WORK_DIR/stamped_traj_estimate.txt ]
+  then
+    rosrun rpg_trajectory_evaluation bag_to_pose.py \
+        $WORK_DIR/Evaluate-$var.bag \
+        /svo/pose_imu --out=stamped_traj_estimate.txt
+  fi
 
   # copy groundtruth to evaluate directory
-  cp $EVALUATE_OUTPUT_DIR/../groundtruth/$var/stamped_groundtruth.txt $WORK_DIR
+  if ! [ -e $WORK_DIR/stamped_groundtruth.txt ]
+  then
+    cp $EVALUATE_OUTPUT_DIR/../groundtruth/$var/stamped_groundtruth.txt $WORK_DIR
+  fi
 
   # evaluate
-  cd $WORK_DIR || exit; evo_ape tum stamped_groundtruth.txt stamped_traj_estimate.txt -vap
+  cd $WORK_DIR || exit; evo_ape tum stamped_groundtruth.txt stamped_traj_estimate.txt -vap --n_to_align 100
 
 done

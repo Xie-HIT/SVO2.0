@@ -34,6 +34,7 @@ namespace factory {
 BaseOptions loadBaseOptions(const ros::NodeHandle& pnh, bool forward_default)
 {
   BaseOptions o;
+  o.distance_th = vk::param<double>(pnh, "distance_th", 0.1);
   o.max_n_kfs = vk::param<int>(pnh, "max_n_kfs", 5);
   o.use_imu = vk::param<bool>(pnh, "use_imu", false);
   o.trace_dir = vk::param<std::string>(pnh, "trace_dir", ros::package::getPath("svo")+"/trace");

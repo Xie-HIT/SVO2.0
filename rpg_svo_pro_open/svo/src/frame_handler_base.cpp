@@ -654,22 +654,35 @@ size_t FrameHandlerBase::sparseImageAlignment()
     if (map_->size() < 5)
       prior_trans = 0; // during the first few frames we don't want a prior (TODO)
 
-    sparse_img_align_->setWeightedPrior(T_newimu_lastimu_prior_, 0.0, 0.0,
+    sparse_img_align_->setWeightedPrior(T_newimu_lastimu_prior_/* 位姿先验 */, 0.0, 0.0,
                                         options_.img_align_prior_lambda_rot,
                                         prior_trans, 0.0, 0.0);
   }
   sparse_img_align_->setMaxNumFeaturesToAlign(options_.img_align_max_num_features);
 
+  // TODO (xie chen): 保存先验，后面异常检测要用
+  const Position& prior_position = new_frames_->get_T_W_B().log().head(3);
+  const Transformation& prior_T_W_B = new_frames_->get_T_W_B();
+
   // 直接法跟踪角点，得到相对位姿，采用图像金字塔逐层优化
   // 返回跟踪的角点数量
   size_t img_align_n_tracked = sparse_img_align_->run(last_frames_, new_frames_);
+
+  // TODO (xie chen): 异常检测
+  double distance = (new_frames_->get_T_W_B().log().head(3) - prior_position).norm();
+  if(distance > options_.distance_th)
+  {
+    if(options_.distance_th != 0)
+      std::cout << "稀疏光度对齐失败，与先验位置差异：" << distance << " [m]" << std::endl;
+    new_frames_->set_T_W_B(prior_T_W_B);
+  }
 
   if (options_.trace_statistics)
   {
     SVO_STOP_TIMER("sparse_img_align");
     SVO_LOG("img_align_n_tracked", img_align_n_tracked);
   }
-  VLOG(40) << "Sparse image alignment tracked " << img_align_n_tracked << " features.";
+  std::cout << "Sparse image alignment tracked " << img_align_n_tracked << " features." << std::endl;
   return img_align_n_tracked;
 }
 
@@ -1038,6 +1051,7 @@ void FrameHandlerBase::setTrackingQuality(const size_t num_observations)
   if (!last_frames_->isKeyframe() &&
       feature_drop > options_.quality_max_fts_drop)
   {
+    std::cout << "跟踪的路标点: " << static_cast<int>(num_obs_last_) << " -> " << num_observations << std::endl;
     SVO_WARN_STREAM("Lost "<< feature_drop <<" features!");
     tracking_quality_ = TrackingQuality::kInsufficient;
   }

@@ -190,6 +190,10 @@ struct BaseOptions
   /// to try and relocalize before we reset() and set to STAGE_PAUSED.
   size_t relocalization_max_trials = 100;  // 在重定位阶段，尝试这些数目的图片用于重定位
 
+  /// 异常检测：若稀疏光度对齐之后的位置相对于 IMU 先验位置的距离超过这个阈值，则使用 IMU 先验
+  /// 0 就是不使用稀释光度对齐
+  double distance_th = 0.1;
+
   /// EXPERIMENTAL Should IMU measurements be used.
   bool use_imu = false;
 
