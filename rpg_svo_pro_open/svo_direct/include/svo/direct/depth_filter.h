@@ -22,10 +22,15 @@ namespace svo {
 class AbstractDetector;
 typedef std::shared_ptr<AbstractDetector> DetectorPtr;
 struct DetectorOptions;
+class DepthFilter;
 
 /// Depth-filter config parameters
 struct DepthFilterOptions
 {
+  /// 多相机之间的共视邻接矩阵：默认值为 Newer College 配置
+  /// 需保持和 yaml 中定义的相机一样的顺序
+  std::vector<std::vector<int> > adj{{1, 1, 1, 0}, {1, 1, 0, 1}, {1, 0, 1, 0}, {0, 1, 0, 1}};
+
   /// Threshold for the uncertainty of the seed. If seed's sigma2 is thresh
   /// smaller than the inital sigma, it is considered as converged.
   /// Default value is 200. If seeds should converge quicker, set it to 50 or
@@ -70,6 +75,67 @@ struct DepthFilterOptions
   bool extra_map_points = false;
 };
 
+namespace depth_filter_utils {
+
+/// Initialize new seeds from a frame.
+void initializeSeeds(
+        const FramePtr& frame,
+        const DetectorPtr& feature_detector,
+        const size_t max_n_seeds,
+        const float min_depth,
+        const float max_depth,
+        const float mean_depth,
+        DepthFilter& depth_filter,
+        const std::vector<FramePtr>& group = std::vector<FramePtr>());
+
+/// Update Seed
+bool updateSeed(
+        const Frame& cur_frame,
+        Frame& ref_frame,
+        const size_t& seed_index,
+        Matcher& matcher,
+        const FloatType sigma2_convergence_threshold,
+        const bool check_visibility = true,
+        const bool check_convergence = false,
+        const bool use_vogiatzis_update = true);
+
+bool updateFilterVogiatzis(
+        const FloatType z,
+        const FloatType tau2,
+        const FloatType z_range,
+        Eigen::Ref<SeedState>& seed);
+
+bool updateFilterGaussian(
+        const FloatType z,
+        const FloatType tau2,
+        Eigen::Ref<SeedState>& seed);
+
+/// Compute the uncertainty of the measurement.
+double computeTau(
+        const Transformation& T_ref_cur,
+        const BearingVector& f,
+        const FloatType z,
+        const FloatType px_error_angle);
+
+double computeEpiGradAngle(
+        const Transformation& T_cur_ref,
+        const BearingVector& f_ref,
+        const GradientVector& grad,
+        const FloatType depth_estimate);
+
+#ifdef SVO_USE_PHOTOMETRIC_DISPARITY_ERROR
+bool setSeedCovariance(
+    const int halfpatch_size,
+    const double image_noise2,
+    SeedImplementation::Ptr seed);
+
+double getSeedDisparityUncertainty(
+    const SeedImplementation::Ptr& seed,
+    const Transformation& T_cur_ref);
+#endif
+
+} // namespace depth_filter_utils
+
 /// Depth filter implements the Bayesian Update proposed in:
 /// "Video-based, Real-Time Multi View Stereo" by G. Vogiatzis and C. Hern??ndez.
 /// In Image and Vision Computing, 29(7):434-441, 2011.
@@ -86,6 +152,7 @@ protected:
     FramePtr ref_frame;
     size_t ref_frame_seed_index;
     double min_depth, max_depth, mean_depth;
+    std::vector<FramePtr> group_;
 
     /// Default constructor
     Job()
@@ -101,10 +168,12 @@ protected:
     {}
 
     /// Constructor for seed initialization
-    Job(const FramePtr& f, double min_d, double max_d, double mean_d)
+    Job(const FramePtr& f, double min_d, double max_d, double mean_d, const std::vector<FramePtr> group/* deep copy */)
       : type(SEED_INIT), cur_frame(f), ref_frame(nullptr)
       , min_depth(min_d), max_depth(max_d), mean_depth(mean_d)
-    {}
+    {
+      group_ = group;
+    }
   };
 
 public:
@@ -121,11 +190,18 @@ public:
   DepthFilter(
       const DepthFilterOptions& options,
       const DetectorOptions& detector,
-      const std::shared_ptr<CameraBundle>& cams);
+      const std::shared_ptr<CameraBundle>& cams,
+      bool use_multi_cam);
 
   /// Constructor for REMODE-CPU
   DepthFilter(
       const DepthFilterOptions& options);
+
+  /// 判断两相机是否共视
+  inline bool covisual(int cur_cam_id, int old_cam_id)
+  {
+    return options_.adj.at(cur_cam_id).at(old_cam_id);
+  }
 
   /// Destructor stops thread if necessary.
   virtual ~DepthFilter();
@@ -141,7 +217,8 @@ public:
       const FramePtr& frame,
       const double depth_mean,
       const double depth_min,
-      const double depth_max);
+      const double depth_max,
+      std::pair<size_t, size_t> counter = std::make_pair(1, 1));
 
   /// Resets all jobs of the parallel thread
   void reset();
@@ -164,6 +241,16 @@ public:
   DetectorPtr sec_feature_detector_; // for extra points used for loop closing
 
 protected:
+  friend void depth_filter_utils::initializeSeeds(
+          const FramePtr& frame,
+          const DetectorPtr& feature_detector,
+          const size_t max_n_seeds,
+          const float min_depth,
+          const float max_depth,
+          const float mean_depth,
+          DepthFilter& depth_filter,
+          const std::vector<FramePtr>& group);
+
   mutex_t jobs_mut_;
   JobQueue jobs_;
   std::condition_variable jobs_condvar_;
@@ -171,67 +258,12 @@ protected:
   bool quit_thread_ = false;
   Matcher::Ptr matcher_;
 
+  /// 多相机配置
+  bool use_multi_cam_;
+  std::vector<FramePtr> group_; // 这些多相机是同一个 frame_bundle，加入到深度滤波器
+
   /// A thread that is continuously updating the seeds.
   void updateSeedsLoop();
 };
-
-namespace depth_filter_utils {
-
-/// Initialize new seeds from a frame.
-void initializeSeeds(
-    const FramePtr& frame,
-    const DetectorPtr& feature_detector,
-    const size_t max_n_seeds,
-    const float min_depth,
-    const float max_depth,
-    const float mean_depth);
-
-/// Update Seed
-bool updateSeed(
-    const Frame& cur_frame,
-    Frame& ref_frame,
-    const size_t& seed_index,
-    Matcher& matcher,
-    const FloatType sigma2_convergence_threshold,
-    const bool check_visibility = true,
-    const bool check_convergence = false,
-    const bool use_vogiatzis_update = true);
-
-bool updateFilterVogiatzis(
-    const FloatType z,
-    const FloatType tau2,
-    const FloatType z_range,
-    Eigen::Ref<SeedState>& seed);
-
-bool updateFilterGaussian(
-    const FloatType z,
-    const FloatType tau2,
-    Eigen::Ref<SeedState>& seed);
-
-/// Compute the uncertainty of the measurement.
-double computeTau(
-    const Transformation& T_ref_cur,
-    const BearingVector& f,
-    const FloatType z,
-    const FloatType px_error_angle);
-
-double computeEpiGradAngle(
-    const Transformation& T_cur_ref,
-    const BearingVector& f_ref,
-    const GradientVector& grad,
-    const FloatType depth_estimate);
-
-#ifdef SVO_USE_PHOTOMETRIC_DISPARITY_ERROR
-bool setSeedCovariance(
-    const int halfpatch_size,
-    const double image_noise2,
-    SeedImplementation::Ptr seed);
-
-double getSeedDisparityUncertainty(
-    const SeedImplementation::Ptr& seed,
-    const Transformation& T_cur_ref);
-#endif
-
-} // namespace depth_filter_utils
 
 } // namespace svo

@@ -86,40 +86,98 @@ UpdateResult FrameHandlerMono::processFirstFrame()
   if(res == InitResult::kTracking)
     return UpdateResult::kDefault;
 
+  // TODO (xie chen): Add OLD multi-cameras to keyframe, map
   // make old frame keyframe
   initializer_->frames_ref_->setKeyframe();
-  initializer_->frames_ref_->at(0)->setKeyframe();
-  if(bundle_adjustment_type_==BundleAdjustmentType::kCeres)
+  if(use_multi_cam_)
   {
-     map_->addKeyframe(initializer_->frames_ref_->at(0),
-                       bundle_adjustment_type_==BundleAdjustmentType::kCeres);
-  }
-  else if(bundle_adjustment_type_==BundleAdjustmentType::kGtsam)
-  {
-    CHECK(bundle_adjustment_)
+    for(size_t i=0; i<initializer_->frames_ref_->frames_.size(); ++i)
+    {
+      const FramePtr& frame = initializer_->frames_ref_->frames_.at(i);
+      frame->setKeyframe();
+      if(bundle_adjustment_type_==BundleAdjustmentType::kCeres)
+      {
+        map_->addKeyframe(initializer_->frames_ref_->at(i),
+                          bundle_adjustment_type_==BundleAdjustmentType::kCeres);
+      }
+      else if(bundle_adjustment_type_==BundleAdjustmentType::kGtsam)
+      {
+        CHECK(bundle_adjustment_)
         << "bundle_adjustment_type_ is kGtsam but bundle_adjustment_ is NULL";
-    bundle_adjustment_->bundleAdjustment(initializer_->frames_ref_);
+        bundle_adjustment_->bundleAdjustment(initializer_->frames_ref_);
+      }
+      else
+      {
+        map_->addKeyframe(initializer_->frames_ref_->at(i), false);
+      }
+    }
   }
   else
   {
-    map_->addKeyframe(initializer_->frames_ref_->at(0), false);
+    initializer_->frames_ref_->at(0)->setKeyframe();
+    if(bundle_adjustment_type_==BundleAdjustmentType::kCeres)
+    {
+      map_->addKeyframe(initializer_->frames_ref_->at(0),
+                        bundle_adjustment_type_==BundleAdjustmentType::kCeres);
+    }
+    else if(bundle_adjustment_type_==BundleAdjustmentType::kGtsam)
+    {
+      CHECK(bundle_adjustment_)
+      << "bundle_adjustment_type_ is kGtsam but bundle_adjustment_ is NULL";
+      bundle_adjustment_->bundleAdjustment(initializer_->frames_ref_);
+    }
+    else
+    {
+      map_->addKeyframe(initializer_->frames_ref_->at(0), false);
+    }
   }
-  // make new frame keyframe
-  newFrame()->setKeyframe();
-  if(!frame_utils::getSceneDepth(newFrame(),depth_median_[0], depth_min_[0], depth_max_[0]))
-  {
-    depth_min_[0] = 0.2; depth_median_[0] = 3.0; depth_max_[0] = 100;
-  }
-  VLOG(40) << "Current Frame Depth: " << "min: " << depth_min_
-          << ", max: " << depth_max_ << ", median: " << depth_median_;
-  depth_filter_->addKeyframe(
-              newFrame(), depth_median_[0], 0.5*depth_min_[0], depth_median_[0]*1.5); // 将当前帧选为关键帧
-  VLOG(40) << "Updating seeds in second frame using last frame...";
-  depth_filter_->updateSeeds({ newFrame() }, lastFrameUnsafe()); // 用上一帧去更新当前关键帧
 
-  // add frame to map
-  map_->addKeyframe(newFrame(),
-                    bundle_adjustment_type_==BundleAdjustmentType::kCeres);
+  // TODO (xie chen): Add NEW multi-cameras to keyframe, map, depth filter
+  // make new frame keyframe
+  new_frames_->setKeyframe();
+  if(use_multi_cam_)
+  {
+    for(size_t i=0; i<newFrames().size(); ++i)
+    {
+      const FramePtr &newFrame = newFrames()[i];
+      const FramePtr &lastFrameUnsafe = lastFramesUnsafe()[i];
+
+      newFrame->setKeyframe();
+
+      if(!frame_utils::getSceneDepth(newFrame,depth_median_[i], depth_min_[i], depth_max_[i]))
+      {
+        depth_min_[i] = 0.2; depth_median_[i] = 3.0; depth_max_[i] = 100;
+      }
+      VLOG(40) << "Current Frame Depth: " << "min: " << depth_min_[i]
+               << ", max: " << depth_max_[i] << ", median: " << depth_median_[i];
+      depth_filter_->addKeyframe(newFrame, depth_median_[i], 0.5*depth_min_[i],
+                                 depth_median_[i]*1.5, std::make_pair(i+1, newFrames().size()));
+      VLOG(40) << "Updating seeds in second frame using last frame...";
+      depth_filter_->updateSeeds({ newFrame }, lastFrameUnsafe); // 对应相机更新深度滤波器
+
+      // add frame to map
+      map_->addKeyframe(newFrame,bundle_adjustment_type_==BundleAdjustmentType::kCeres);
+    }
+  }
+  else
+  {
+    newFrame()->setKeyframe();
+
+    if(!frame_utils::getSceneDepth(newFrame(),depth_median_[0], depth_min_[0], depth_max_[0]))
+    {
+      depth_min_[0] = 0.2; depth_median_[0] = 3.0; depth_max_[0] = 100;
+    }
+    VLOG(40) << "Current Frame Depth: " << "min: " << depth_min_
+             << ", max: " << depth_max_ << ", median: " << depth_median_;
+    depth_filter_->addKeyframe(newFrame(), depth_median_[0], 0.5*depth_min_[0],
+                               depth_median_[0]*1.5, std::make_pair(1, 1)); // 将当前帧选为关键帧
+    VLOG(40) << "Updating seeds in second frame using last frame...";
+    depth_filter_->updateSeeds({ newFrame() }, lastFrameUnsafe()); // 用上一帧去更新当前关键帧
+
+    // add frame to map
+    map_->addKeyframe(newFrame(),bundle_adjustment_type_==BundleAdjustmentType::kCeres);
+  }
+
   stage_ = Stage::kTracking;
   tracking_quality_ = TrackingQuality::kGood;
   initializer_->reset();
@@ -174,7 +232,8 @@ UpdateResult FrameHandlerMono::processFirstFrame_v2()
   VLOG(40) << "Current Frame Depth: " << "min: " << depth_min_
   << ", max: " << depth_max_ << ", median: " << depth_median_;
   depth_filter_->addKeyframe(
-          newFrame(), depth_median_[0], 0.5*depth_min_[0], depth_median_[0]*1.5); // 将当前帧选为关键帧
+          newFrame(), depth_median_[0], 0.5*depth_min_[0],
+          depth_median_[0]*1.5, std::make_pair(1, 1)); // 将当前帧选为关键帧
   VLOG(40) << "Updating seeds in second frame using last frame...";
   depth_filter_->updateSeeds({ newFrame() }, lastFrameUnsafe()); // 用上一帧去更新当前关键帧
 
@@ -256,7 +315,7 @@ UpdateResult FrameHandlerMono::processFrame()
     for(size_t i=0; i<newFrames().size(); ++i)
     {
       const FramePtr& newFrame = newFrames()[i];
-      if(!frame_utils::getSceneDepth(newFrame, depth_median_[i], depth_min_[i], depth_max_[i]))
+      if(!frame_utils::getSceneDepth(newFrame, depth_median_[i], depth_min_[i], depth_max_[i])) // 每次都会重新覆盖所有相机的深度先验
       {
         depth_min_[i] = 0.2; depth_median_[i] = 3.0; depth_max_[i] = 100;
       }
@@ -386,13 +445,15 @@ UpdateResult FrameHandlerMono::processFrame()
     {
       const FramePtr &newFrame = keyframe_candidates_[i];
       depth_filter_->addKeyframe(
-              newFrame, depth_median_[i], 0.5*depth_min_[i], depth_median_[i]*1.5);
+              newFrame, depth_median_[i], 0.5*depth_min_[i],
+              depth_median_[i]*1.5, std::make_pair(i+1, keyframe_candidates_.size()));
     }
   }
   else
   {
     depth_filter_->addKeyframe(
-            newFrame(), depth_median_[0], 0.5*depth_min_[0], depth_median_[0]*1.5);
+            newFrame(), depth_median_[0], 0.5*depth_min_[0],
+            depth_median_[0]*1.5, std::make_pair(1, 1));
   }
 
   if(options_.update_seeds_with_old_keyframes)
@@ -526,6 +587,11 @@ const std::vector<FramePtr>& FrameHandlerMono::newFrames() const
 const FramePtr& FrameHandlerMono::lastFrameUnsafe() const
 {
   return last_frames_->frames_[0];
+}
+
+const std::vector<FramePtr>& FrameHandlerMono::lastFramesUnsafe() const
+{
+  return last_frames_->frames_;
 }
 
 bool FrameHandlerMono::haveLastFrame() const

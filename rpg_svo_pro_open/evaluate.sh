@@ -31,11 +31,13 @@ help(){
   exit
 }
 
-while getopts :he OPTION;do
+while getopts :her OPTION;do
     case $OPTION in
     h)help
     ;;
     e)SKIP=true
+    ;;
+    r)REMOVE=true
     ;;
     ?)help
     ;;
@@ -57,11 +59,17 @@ do
   if [[ -e "$DATASET_ROOT""/$var" ]]
   then
     printf "\033[32m [Success] Found dataset: %s \033[0m\n" "$DATASET_ROOT""/$var"
-    if ! [[ -e WORK_DIR ]]
+    if ! [[ -e $WORK_DIR ]]
     then
       mkdir -p $WORK_DIR
+      echo "-- Build new folder: $WORK_DIR"
+    elif [ $REMOVE ]
+    then
+      rm -rf $WORK_DIR
+      echo "-- Remove old folder: $WORK_DIR"
+      mkdir -p $WORK_DIR
+      echo "-- Build new folder: $WORK_DIR"
     fi
-    echo "-- Output will be put on: $WORK_DIR"
   else
     printf "\033[33m [Warning] No such dataset: %s \033[0m\n" "$DATASET_ROOT""/$var"
   fi

@@ -94,6 +94,7 @@ protected:
   // unsafe because last_frame might be nullptr. use this function only
   // when you are sure that it is set!
   const FramePtr& lastFrameUnsafe() const;
+  const std::vector<FramePtr>& lastFramesUnsafe() const;
 
   bool haveLastFrame() const;
 

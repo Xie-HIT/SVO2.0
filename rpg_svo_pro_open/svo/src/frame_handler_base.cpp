@@ -142,7 +142,7 @@ FrameHandlerBase::FrameHandlerBase(const BaseOptions& base_options, const Reproj
   DetectorOptions detector_options2 = detector_options;
   //detector_options2.detector_type = DetectorType::kGridGrad;
 
-  depth_filter_.reset(new DepthFilter(depthfilter_options, detector_options2, cams_));
+  depth_filter_.reset(new DepthFilter(depthfilter_options, detector_options2, cams_, use_multi_cam_));
   initializer_ = initialization_utils::makeInitializer(init_options, tracker_options, detector_options, cams_);
   overlap_kfs_.resize(cams_->getNumCameras());
 
@@ -672,7 +672,7 @@ size_t FrameHandlerBase::sparseImageAlignment()
   double distance = (new_frames_->get_T_W_B().log().head(3) - prior_position).norm();
   if(distance > options_.distance_th)
   {
-    if(options_.distance_th != 0)
+    if(options_.distance_th)
       std::cout << "稀疏光度对齐失败，与先验位置差异：" << distance << " [m]" << std::endl;
     new_frames_->set_T_W_B(prior_T_W_B);
   }

@@ -26,9 +26,12 @@ namespace svo {
 DepthFilter::DepthFilter(
     const DepthFilterOptions& options,
     const DetectorOptions& detector_options,
-    const CameraBundle::Ptr& cams)
+    const CameraBundle::Ptr& cams,
+    bool use_multi_cam)
   : DepthFilter(options)
 {
+  use_multi_cam_ = use_multi_cam;
+
   // TODO: make a detector for every camera!
   feature_detector_ =
       feature_detection_utils::makeDetector(detector_options, cams->getCameraShared(0));
@@ -86,11 +89,20 @@ void DepthFilter::stopThread()
   }
 }
 
+void DepthFilter::reset()
+{
+  ulock_t lock(jobs_mut_);
+  while(!jobs_.empty())
+    jobs_.pop();
+  SVO_INFO_STREAM("DepthFilter: RESET.");
+}
+
 void DepthFilter::addKeyframe(
     const FramePtr& frame,
     const double depth_mean,
     const double depth_min,
-    const double depth_max)
+    const double depth_max,
+    std::pair<size_t, size_t> counter/* 当前处理的在多相机中的位置： i in N */)
 {
   // allocate memory for new features.
   frame->resizeFeatureStorage(
@@ -99,12 +111,15 @@ void DepthFilter::addKeyframe(
            sec_feature_detector_->closeness_check_grid_.size() :
            0u));
 
+  // TODO (xie chen): 让多相机之间互相知道自己在 Job 中的位置，并加入当前帧到待更新组
+  group_.emplace_back(frame);
+
   if(thread_ == nullptr)
   {
     ulock_t lock(feature_detector_mut_);
     depth_filter_utils::initializeSeeds(
           frame, feature_detector_, options_.max_n_seeds_per_frame,
-          depth_min, depth_max, depth_mean);
+          depth_min, depth_max, depth_mean, *this);
     if (options_.extra_map_points)
     {
       for (size_t idx = 0; idx < frame->numFeatures(); idx++)
@@ -119,27 +134,28 @@ void DepthFilter::addKeyframe(
       depth_filter_utils::initializeSeeds(
             frame, sec_feature_detector_,
             options_.max_n_seeds_per_frame + options_.max_map_seeds_per_frame,
-            depth_min, depth_max, depth_mean);
+            depth_min, depth_max, depth_mean, *this);
     }
   }
   else
   {
     ulock_t lock(jobs_mut_);
 
-    // clear all other jobs, this one has priority
-    while(!jobs_.empty())
-      jobs_.pop();
-    jobs_.push(Job(frame, depth_min, depth_max, depth_mean));
+    // FIXME (xie chen): why ?
+    if(!use_multi_cam_)
+    {
+      // clear all other jobs, this one has priority
+      while(!jobs_.empty())
+        jobs_.pop();
+    }
+
+    jobs_.push(Job(frame, depth_min, depth_max, depth_mean, group_));
     jobs_condvar_.notify_all();
   }
-}
 
-void DepthFilter::reset()
-{
-  ulock_t lock(jobs_mut_);
-  while(!jobs_.empty())
-    jobs_.pop();
-  SVO_INFO_STREAM("DepthFilter: RESET.");
+  // TODO (xie chen): reset group_
+  if(counter.first == counter.second)
+    group_.clear();
 }
 
 void DepthFilter::updateSeedsLoop()
@@ -168,7 +184,7 @@ void DepthFilter::updateSeedsLoop()
       depth_filter_utils::initializeSeeds(
             job.cur_frame, feature_detector_,
             options_.max_n_seeds_per_frame,
-            job.min_depth, job.max_depth, job.mean_depth);
+            job.min_depth, job.max_depth, job.mean_depth, *this, job.group_);
       if (options_.extra_map_points)
       {
         for (size_t idx = 0; idx < job.cur_frame->numFeatures(); idx++)
@@ -183,7 +199,7 @@ void DepthFilter::updateSeedsLoop()
         depth_filter_utils::initializeSeeds(
               job.cur_frame, sec_feature_detector_,
               options_.max_n_seeds_per_frame + options_.max_map_seeds_per_frame,
-              job.min_depth, job.max_depth, job.mean_depth);
+              job.min_depth, job.max_depth, job.mean_depth, *this, job.group_);
       }
     }
     else if(job.type == Job::UPDATE)
@@ -259,7 +275,9 @@ void initializeSeeds(
     const size_t max_n_seeds,
     const float depth_min,
     const float depth_max,
-    const float depth_mean)
+    const float depth_mean,
+    DepthFilter& depth_filter,
+    const std::vector<FramePtr>& group)
 {
   // Detect new features.
   Keypoints new_px;
@@ -376,6 +394,25 @@ void initializeSeeds(
 
   SVO_DEBUG_STREAM("DepthFilter: "<< frame->cam()->getLabel() <<
                    " Initialized "<< n_new <<" new seeds");
+
+  // TODO (xie chen): 利用多相机之间的已知外参，互相更新彼此的新点
+  if(depth_filter.use_multi_cam_)
+  {
+    assert(frame->nframe_index_ == group.back()->nframe_index_);
+    for(const auto& old_frame: group)
+    {
+      int old_frame_id = old_frame->nframe_index_;
+      if(old_frame_id == frame->nframe_index_)
+        break;
+
+      if(depth_filter.covisual(frame->nframe_index_, old_frame_id))
+      {
+        depth_filter.updateSeeds({old_frame}, frame);
+        depth_filter.updateSeeds({frame}, old_frame);
+      }
+    }
+  }
+
 }
 
 bool updateSeed(

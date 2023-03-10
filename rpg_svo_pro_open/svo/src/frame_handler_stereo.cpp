@@ -165,7 +165,7 @@ UpdateResult FrameHandlerStereo::makeKeyframe()
     setDetectorOccupiedCells(kf_id, depth_filter_->feature_detector_);
   } // release lock
   depth_filter_->addKeyframe(
-        new_frames_->at(kf_id), depth_median_[0], 0.5*depth_min_[0], depth_median_[0]*1.5);
+        new_frames_->at(kf_id), depth_median_[0], 0.5*depth_min_[0],depth_median_[0]*1.5);
   depth_filter_->updateSeeds(overlap_kfs_.at(0), new_frames_->at(0));
   depth_filter_->updateSeeds(overlap_kfs_.at(1), new_frames_->at(1));
 
