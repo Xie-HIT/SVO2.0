@@ -34,7 +34,13 @@ FrameHandlerMono::FrameHandlerMono(
   : FrameHandlerBase(
       base_options, reprojector_options, depth_filter_options,
       feature_detector_options, init_options, tracker_options, cam, use_multi_cam)
-{ ; }
+{
+//  // TEST ***
+//  for(const auto& x: depth_filter_options.overlap)
+//    for(const auto& y: x)
+//      std::cout << y << ", ";
+//  std::cout << std::endl;
+}
 
 UpdateResult FrameHandlerMono::processFrameBundle()
 {
@@ -135,7 +141,7 @@ UpdateResult FrameHandlerMono::processFirstFrame()
   // TODO (xie chen): Add NEW multi-cameras to keyframe, map, depth filter
   // make new frame keyframe
   new_frames_->setKeyframe();
-  if(use_multi_cam_)
+  if(0) // TODO (xie chen): 暂不将多相机地图点加入深度滤波器，因为之后尺度会调整
   {
     for(size_t i=0; i<newFrames().size(); ++i)
     {

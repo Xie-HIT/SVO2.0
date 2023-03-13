@@ -1,4 +1,10 @@
 label: "Newer_College"
+
+overlap: [1, 1, 1, 0,
+          1, 1, 0, 1, 
+          1, 0, 1, 0, 
+          0, 1, 0, 1]
+
 cameras:
 - camera:
     label: cam0

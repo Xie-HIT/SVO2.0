@@ -96,9 +96,11 @@ DetectorOptions loadDetectorOptions(const ros::NodeHandle& pnh)
   return o;
 }
 
-DepthFilterOptions loadDepthFilterOptions(const ros::NodeHandle& pnh)
+DepthFilterOptions loadDepthFilterOptions(const ros::NodeHandle& pnh,
+                                          const CameraBundle::Ptr& ncam = nullptr)
 {
   DepthFilterOptions o;
+  o.overlap = ncam->overlap_; // TODO (xie chen)
   o.max_search_level = vk::param<int>(pnh, "n_pyr_levels", 3) - 1;
   o.use_threaded_depthfilter =
       vk::param<bool>(pnh, "use_threaded_depthfilter", true);
@@ -471,7 +473,7 @@ FrameHandlerMono::Ptr makeMono_multi(const ros::NodeHandle& pnh, const CameraBun
   FrameHandlerMono::Ptr vo =
           std::make_shared<FrameHandlerMono>(
                   loadBaseOptions(pnh, false), // 读取里程计的参数
-                  loadDepthFilterOptions(pnh), // 读取深度滤波器的参数
+                  loadDepthFilterOptions(pnh, ncam), // 读取深度滤波器的参数
                   loadDetectorOptions(pnh), // 读取角点提取的参数
                   loadInitializationOptions(pnh), // 读取初始化的参数
                   loadReprojectorOptions(pnh), // 读取重投影相关的参数

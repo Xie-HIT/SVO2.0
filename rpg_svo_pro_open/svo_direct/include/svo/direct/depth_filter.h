@@ -29,7 +29,7 @@ struct DepthFilterOptions
 {
   /// 多相机之间的共视邻接矩阵：默认值为 Newer College 配置
   /// 需保持和 yaml 中定义的相机一样的顺序
-  std::vector<std::vector<int> > adj{{1, 1, 1, 0}, {1, 1, 0, 1}, {1, 0, 1, 0}, {0, 1, 0, 1}};
+  std::vector<std::vector<int> > overlap;
 
   /// Threshold for the uncertainty of the seed. If seed's sigma2 is thresh
   /// smaller than the inital sigma, it is considered as converged.
@@ -197,10 +197,10 @@ public:
   DepthFilter(
       const DepthFilterOptions& options);
 
-  /// 判断两相机是否共视
-  inline bool covisual(int cur_cam_id, int old_cam_id)
+  /// 判断两相机是否有重叠视野
+  inline bool have_overlap(int cur_cam_id, int old_cam_id)
   {
-    return options_.adj.at(cur_cam_id).at(old_cam_id);
+    return options_.overlap.at(cur_cam_id).at(old_cam_id);
   }
 
   /// Destructor stops thread if necessary.

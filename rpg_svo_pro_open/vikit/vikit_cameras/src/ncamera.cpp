@@ -49,6 +49,30 @@ NCamera::Ptr NCamera::loadFromYaml(const std::string& yaml_file)
       }
     }
 
+    // TODO (xie chen): load overlap, used in depth filter
+    const YAML::Node& overlap = doc["overlap"];
+    assert(overlap.size() == 0 || overlap.size() == static_cast<size_t>(std::pow(cameras_node.size(), 2)));
+    ncam->overlap_.resize(cameras_node.size());
+
+    if(overlap.size())
+    {
+      for(size_t i=0; i<cameras_node.size(); ++i)
+      {
+        std::vector<int>& each_cam_overlap = ncam->overlap_[i];
+        for(size_t j=0; j<cameras_node.size(); ++j)
+        {
+          each_cam_overlap.emplace_back(overlap[i*cameras_node.size() + j].as<int>());
+        }
+      }
+    }
+    else
+    {
+      for(size_t i=0; i<cameras_node.size(); ++i)
+      {
+        ncam->overlap_[i] = std::vector<int>(cameras_node.size(), 0);
+      }
+    }
+
     return ncam;
   } catch (const std::exception& ex) {
     LOG(ERROR) << "Failed to load NCamera from file " << yaml_file << " with the error: \n"

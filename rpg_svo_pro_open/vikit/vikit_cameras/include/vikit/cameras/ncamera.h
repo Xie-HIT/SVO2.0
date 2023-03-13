@@ -83,6 +83,10 @@ public:
     cameras_.erase(cameras_.begin() + N, cameras_.end());
   }
 
+public:
+  /// TODO (xie chen): 邻接矩阵
+  std::vector<std::vector<int> > overlap_;
+
 private:
   /// Internal consistency checks and initialization.
   void initInternal();
@@ -95,6 +99,7 @@ private:
 
   /// A label for this camera rig, a name.
   std::string label_;
+
 };
 
 } // namespace cameras

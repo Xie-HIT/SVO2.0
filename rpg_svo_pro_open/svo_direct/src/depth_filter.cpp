@@ -405,7 +405,7 @@ void initializeSeeds(
       if(old_frame_id == frame->nframe_index_)
         break;
 
-      if(depth_filter.covisual(frame->nframe_index_, old_frame_id))
+      if(depth_filter.have_overlap(frame->nframe_index_, old_frame_id))
       {
         depth_filter.updateSeeds({old_frame}, frame);
         depth_filter.updateSeeds({frame}, old_frame);
