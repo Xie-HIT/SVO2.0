@@ -1147,6 +1147,7 @@ bool FrameHandlerBase::needNewKf(const Transformation&, int id)
         disparities.reserve(frame->num_features_);
         for (size_t i = 0; i < frame->num_features_; ++i)
         {
+          assert(i <= frame->landmark_vec_.size()); // FIXME (xie chen): check for weird bug
           if (frame->landmark_vec_[i])
           {
             const Point::KeypointIdentifierList& observations =
@@ -1157,6 +1158,8 @@ bool FrameHandlerBase::needNewKf(const Transformation&, int id)
               {
                 if (FramePtr kf = it->frame.lock())
                 {
+                  assert(i <= static_cast<size_t>(frame->px_vec_.cols())); // FIXME (xie chen): check for weird bug
+                  assert(it->keypoint_index_ <= static_cast<size_t>(kf->px_vec_.cols())); // FIXME (xie chen): check for weird bug
                   disparities.push_back(
                           (frame->px_vec_.col(i) -
                            kf->px_vec_.col(it->keypoint_index_)).norm());

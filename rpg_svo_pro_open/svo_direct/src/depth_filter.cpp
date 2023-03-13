@@ -277,7 +277,7 @@ void initializeSeeds(
     const float depth_max,
     const float depth_mean,
     DepthFilter& depth_filter,
-    const std::vector<FramePtr>& group)
+    const std::vector<FramePtr>& group /* 同一个多相机组 */)
 {
   // Detect new features.
   Keypoints new_px;

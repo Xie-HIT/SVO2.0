@@ -1,3 +1,15 @@
+################################
+##### Important parameters #####
+################################
+max_n_kfs: 20 # svo frontend map size, change with camera number: 5n
+reprojector_max_n_kfs: 10 # Local map size. Larger is computationally more intensive. More reduces drift. 5
+kfselect_min_num_frames_between_kfs:  5  # increase this for sparse keyframes
+
+use_edgelets: True # whether use edge in frontend
+img_align_max_level: 5 # Increase this(4) level by one if the image is double the width and height (752x480). Newer College(720×540)
+distance_th: 0.1 # error check, 0.0 means don't use sparse image alignment
+use_async_reprojectors: True # For multi-camera, change it to True for multithreading.
+
 ############################
 ##### Basic parameters #####
 ############################
@@ -17,8 +29,7 @@ pipeline_is_stereo: False
 max_fts: 180
 max_map_fts: 300
 # max_fts: 220
-# change with camera number
-max_n_kfs: 20
+# max_n_kfs: 20
 quality_min_fts: 40
 
 # Map scale when initialized (not used for stereo)
@@ -42,8 +53,10 @@ kfselect_numkfs_lower_thresh: 100
 # You can lower these values for more keyframes
 kfselect_min_dist_metric: 0.1
 kfselect_min_angle: 20
+
 # frame number between neighbor keyframes
-kfselect_min_num_frames_between_kfs:  5  # 3 -> [cm] accuracy
+# kfselect_min_num_frames_between_kfs:  5  # 3 -> [cm] accuracy
+
 # If the median disparity from the last keyframe is smaller,
 # do not take a new keyframe
 # You can lower this value for more keyframes
@@ -80,13 +93,13 @@ detector_threshold_secondary: 200 # Edgelet detector threshold
 detector_threshold_shitomasi: 50 # Map Point detector threshold
 
 # Image Alignment
-distance_th: 0.1 # (xie chen) error check, 0 means don't use sparse image alignment
-img_align_max_level: 4 # Increase this level by one if the image is double the width and height (752x480).
+# distance_th: 0.1 # (xie chen) error check, 0 means don't use sparse image alignment
+# img_align_max_level: 4 # Increase this level by one if the image is double the width and height (752x480). 
 img_align_min_level: 2
 
 # Reprojection
-use_async_reprojectors: False # For stereo, change it to True for multithreading.
-reprojector_max_n_kfs: 10 # Local map size. Larger is computationally more intensive. More reduces drift.
+# use_async_reprojectors: False # For stereo, change it to True for multithreading.
+# reprojector_max_n_kfs: 10 # Local map size. Larger is computationally more intensive. More reduces drift.
 scan_epi_unit_sphere: False # for wide angle lens, set it to True.
 reproject_unconverged_seeds: True
 max_unconverged_seeds_ratio: 0.2
