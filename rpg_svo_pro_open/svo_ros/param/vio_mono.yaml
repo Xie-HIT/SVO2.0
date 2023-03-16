@@ -152,9 +152,6 @@ publish_marker_scale_backend: 0.5 # set to -1 to deactivate visualization of lan
 backend_only_use_corners: false
 backend_scale_stable_thresh: 0.02
 
-# For Loop Correction
-ransac3d_inlier_percent: 35
-
 # outlier rejection
 use_outlier_rejection: true
 outlier_rejection_px_threshold: 2.0
@@ -193,20 +190,25 @@ beta: 0.8
 scale_retrieval_approach: -1
 # Bag of Words match threshold #
 bow_thresh: 0.65
-# Geometric Verification Threshold i.e Minimum Percentage of Inliers #
-#gv_thresh: 40.0
-gv_thresh: 40.0
-# Minimum 3d matches needed for good loop closing #
-min_num_3d: 10
 # Minimum percentage of matches in geometric verification #
 match_thresh: 0.15
 # use opengv for ransac during geometric verification
 use_opengv: true
+# Geometric Verification Threshold i.e Minimum Percentage of Inliers #
+gv_thresh: 40.0
+# Minimum 3d matches needed for good loop closing #
+min_num_3d: 10
+
+# Step1: For Loop Correction
+ransac3d_inlier_percent: 35
+# Step2: For Loop Correction
+# ransac3d_min_pts: 2
+
 
 # Distance threshold when matching ORB features, 48 #
-orb_dist_thresh: 30
+orb_dist_thresh: 48
 # Enable this option to log images and inlier matches between loop closure frames */
 enable_image_logging: false
 # Path to the folder where images will be locked. Make sure folder is already created */
-image_log_base_path: /home/xgrids/svo_ws/src/test/Newer_College/test1/
+image_log_base_path: /tmp/loopclosure_log/
 
