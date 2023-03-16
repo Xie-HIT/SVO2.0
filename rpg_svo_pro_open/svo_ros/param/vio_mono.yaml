@@ -5,10 +5,13 @@ max_n_kfs: 20 # svo frontend map size, change with camera number: 5n
 reprojector_max_n_kfs: 10 # Local map size. Larger is computationally more intensive. More reduces drift. 5
 kfselect_min_num_frames_between_kfs:  5  # increase this for sparse keyframes
 
-use_edgelets: True # whether use edge in frontend
+use_edgelets: False # whether use edge in frontend
 img_align_max_level: 5 # Increase this(4) level by one if the image is double the width and height (752x480). Newer College(720×540)
 distance_th: 0.1 # error check, 0.0 means don't use sparse image alignment
 use_async_reprojectors: True # For multi-camera, change it to True for multithreading.
+
+alpha: 0.8 # loop closing happens after [alpha * 20 + 5] frames
+frames_to_ignore: 20 # loop closing in [10, cur_id - frames_to_ignore]
 
 ############################
 ##### Basic parameters #####
@@ -179,11 +182,11 @@ runlc: True
 # Name of the file which stores the BOW vocabulary #
 voc_name: voc_GEN_8X4.yml.gz
 # Data Extraction Threshold #
-alpha: 0.8
+# alpha: 0.8
 # Loop Closure Detection Threshold #
 beta: 0.8
 # Number of past frames to ignore when looking for loop closures #
-frames_to_ignore: 20
+# frames_to_ignore: 20
 # Approach to use for scale retrieval in monocular case #
 # 1. Common Landmarks Method #
 # 2. Mixed Keypoints Method #
@@ -195,14 +198,15 @@ bow_thresh: 0.65
 gv_thresh: 40.0
 # Minimum 3d matches needed for good loop closing #
 min_num_3d: 10
-# Distance threshold when matching ORB features #
-orb_dist_thresh: 48
 # Minimum percentage of matches in geometric verification #
 match_thresh: 0.15
 # use opengv for ransac during geometric verification
 use_opengv: true
+
+# Distance threshold when matching ORB features, 48 #
+orb_dist_thresh: 30
 # Enable this option to log images and inlier matches between loop closure frames */
 enable_image_logging: false
 # Path to the folder where images will be locked. Make sure folder is already created */
-image_log_base_path: /tmp/loopclosure_log/
+image_log_base_path: /home/xgrids/svo_ws/src/test/Newer_College/test1/
 
