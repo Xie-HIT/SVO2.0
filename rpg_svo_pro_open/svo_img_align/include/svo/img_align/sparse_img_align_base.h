@@ -43,6 +43,9 @@ struct SparseImgAlignOptions
   bool use_distortion_jacobian = false;
   bool robustification = false;
   double weight_scale = 10;
+
+  // TODO (xie chen)
+  float std_th = 10.0;
 };
 
 /// State to be estimated

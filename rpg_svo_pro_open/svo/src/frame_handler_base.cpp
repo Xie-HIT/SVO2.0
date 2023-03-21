@@ -139,6 +139,7 @@ FrameHandlerBase::FrameHandlerBase(const BaseOptions& base_options, const Reproj
   img_align_options.use_distortion_jacobian = options_.img_align_use_distortion_jacobian;
   img_align_options.estimate_illumination_gain = options_.img_align_est_illumination_gain;
   img_align_options.estimate_illumination_offset = options_.img_align_est_illumination_offset;
+  img_align_options.std_th = options_.std_th; // TODO
 
   sparse_img_align_.reset(new SparseImgAlign(SparseImgAlign::getDefaultSolverOptions(), img_align_options));
   pose_optimizer_.reset(new PoseOptimizer(PoseOptimizer::getDefaultSolverOptions()));
@@ -447,7 +448,7 @@ bool FrameHandlerBase::addFrameBundle(const FrameBundlePtr& frame_bundle)
     last_kf_time_sec_ = new_frames_->at(0)->getTimestampSec();
 
     // TODO (xie chen): 多相机需要依次查询是否踢出窗口的关键帧会触发位姿图
-    if(use_multi_cam_)
+    if(0/*use_multi_cam_*/)
     {
       std::vector<FramePtr> last_rm_kfs;
       map_->getLastRemovedKFs(&last_rm_kfs);
@@ -695,6 +696,7 @@ size_t FrameHandlerBase::sparseImageAlignment()
 
   // TODO (xie chen): 保存先验，后面异常检测要用
   const Position& prior_position = new_frames_->get_T_W_B().log().head(3);
+  const Position& prior_rotation = new_frames_->get_T_W_B().log().tail(3);
   const Transformation& prior_T_W_B = new_frames_->get_T_W_B();
 
   // 直接法跟踪角点，得到相对位姿，采用图像金字塔逐层优化
@@ -703,7 +705,8 @@ size_t FrameHandlerBase::sparseImageAlignment()
 
   // TODO (xie chen): 异常检测
   double distance = (new_frames_->get_T_W_B().log().head(3) - prior_position).norm();
-  if(distance > options_.distance_th)
+  double rotation_dist = (new_frames_->get_T_W_B().log().tail(3)- prior_rotation).norm();
+  if(distance > options_.distance_th || rotation_dist > options_.rotation_th)
   {
     if(options_.distance_th)
       std::cout << "稀疏光度对齐失败，与先验位置差异：" << distance << " [m]" << std::endl;

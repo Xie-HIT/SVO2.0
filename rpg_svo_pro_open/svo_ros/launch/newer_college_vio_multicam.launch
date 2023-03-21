@@ -22,7 +22,7 @@
 
     <!--Parameters-->
     <rosparam file="$(find svo_ros)/param/vio_mono.yaml" />
-    <param name="runlc" value="true" /> <!--Loop Closing-->
+    <param name="runlc" value="false" /> <!--Loop Closing-->
     <param name="multi_cam" value="true" />  <!--Whether to use multi-cameras-->
 
   </node>

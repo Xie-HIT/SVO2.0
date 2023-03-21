@@ -18,8 +18,9 @@ void SvoNodeBase::initThirdParty(int argc, char **argv)
 }
 
 SvoNodeBase::SvoNodeBase()
-: node_handle_(), private_node_handle_("~"), type_(SvoNodeBase::chooseType(private_node_handle_)), // 选择模式：单目、双目、多目
-        svo_interface_(type_, node_handle_, private_node_handle_)
+: node_handle_(), private_node_handle_("~"),
+  type_(SvoNodeBase::chooseType(private_node_handle_, use_multi_cam_)), // 选择模式：单目、双目、多目
+        svo_interface_(type_, node_handle_, private_node_handle_, use_multi_cam_)
 {
   if (svo_interface_.imu_handler_)
   {
@@ -29,11 +30,11 @@ SvoNodeBase::SvoNodeBase()
   svo_interface_.subscribeRemoteKey();
 }
 
-svo::PipelineType SvoNodeBase::chooseType(const ros::NodeHandle& pnh)
+svo::PipelineType SvoNodeBase::chooseType(const ros::NodeHandle& pnh, bool& use_multi_cam)
 {
-    bool multi_cam = vk::param<bool>(pnh, "multi_cam", false);
+    use_multi_cam = vk::param<bool>(pnh, "multi_cam", false);
 
-    if(!multi_cam)
+    if(!use_multi_cam)
     {
         return vk::param<bool>(pnh, "pipeline_is_stereo", false) ?
                svo::PipelineType::kStereo : svo::PipelineType::kMono;

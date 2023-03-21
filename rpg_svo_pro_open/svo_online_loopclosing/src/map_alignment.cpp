@@ -313,11 +313,11 @@ bool MapAlignmentSE3::getTransformRansac(const int min_num_3d,
     return false;
   }
 
-  // TEST ***
-  std::ofstream o;
-  o.open("/home/xgrids/svo_ws/src/test/Newer_College/lc.txt", std::ios::app);
-  o << "loop closing!" << std::endl;
-  o.close();
+//  // TEST ***
+//  std::ofstream o;
+//  o.open("/home/xgrids/svo_ws/src/test/Newer_College/lc.txt", std::ios::app);
+//  o << "loop closing!" << std::endl;
+//  o.close();
 
   return true;
 }

@@ -47,7 +47,7 @@ size_t SparseImgAlign::run(
   {
     std::vector<size_t> fts; // 符合要求的 feature 索引
     sparse_img_align_utils::extractFeaturesSubset(
-          *frame, options_.max_level, patch_size_with_border_, fts); // 把特征点转换到金字塔顶层（4层）
+          *frame, options_.max_level, patch_size_with_border_, fts); // 把特征点转换到金字塔顶层
     n_fts_to_track += fts.size();
     fts_vec_.push_back(fts);
   }
@@ -71,6 +71,10 @@ size_t SparseImgAlign::run(
   residual_cache_.resize(patch_area_, n_fts_to_track);
   visibility_mask_.resize(n_fts_to_track, Eigen::NoChange);
   ref_patch_cache_.resize(patch_area_, n_fts_to_track);
+
+  // TODO (xie chen)
+  valid_cache_.clear();
+  valid_cache_.resize(n_fts_to_track, true);
 
   // the variable to be optimized is the imu-pose of the current frame
   // 优化的初始值
@@ -134,8 +138,9 @@ double SparseImgAlign::evaluateError(
             fts_vec_.at(i).size(),
             options_.estimate_illumination_gain,
             options_.estimate_illumination_offset,
+            options_.std_th,
             feature_counter,
-            jacobian_cache_, ref_patch_cache_);
+            jacobian_cache_, ref_patch_cache_, valid_cache_);
     }
     have_cache_ = true;
   }
@@ -154,12 +159,13 @@ double SparseImgAlign::evaluateError(
           patch_size_, fts_vec_.at(i).size(), T_cur_ref,
           state.alpha, state.beta,
           ref_patch_cache_, xyz_ref_cache_,
-          feature_counter, match_pxs, residual_cache_, visibility_mask_);
+          feature_counter, match_pxs, residual_cache_, visibility_mask_, valid_cache_);
   }
 
   float chi2 = sparse_img_align_utils::computeHessianAndGradient(
         jacobian_cache_, residual_cache_,
-        visibility_mask_, weight_scale_, weight_function_, H, g);
+        visibility_mask_, valid_cache_,
+        weight_scale_, weight_function_, H, g);
   return chi2;
 }
 
@@ -333,14 +339,17 @@ void precomputeJacobiansAndRefPatches(
     const size_t nr_features,
     bool estimate_alpha,
     bool estimate_beta,
+    float std_th,
     size_t& feature_counter,
     JacobianCache& jacobian_cache,
-    RefPatchCache& ref_patch_cache)
+    RefPatchCache& ref_patch_cache,
+    ValidCache& valid_cache)
 {
   const cv::Mat& ref_img = ref_frame->img_pyr_.at(level);
+
   const int stride = ref_img.step; // must be real stride
   const FloatType scale = 1.0f/(1<<level);
-  const int patch_area = patch_size*patch_size;
+  const int patch_area = patch_size * patch_size;
   const int border = 1;
   const int patch_size_wb = patch_size + 2*border; //patch size with border
   const int patch_area_wb = patch_size_wb*patch_size_wb;
@@ -383,6 +392,35 @@ void precomputeJacobiansAndRefPatches(
       }
     }
 
+    // TODO (xie chen): 如果 patch 的梯度不够阈值，则认为是弱纹理区域，不予考虑
+    float sum = 0.0;
+    pixel_counter = 0;
+    Eigen::VectorXf patch(patch_area, 1);
+    for(int y = 0; y < patch_size; ++y) {
+      for (int x = 0; x < patch_size; ++x, ++pixel_counter) {
+        int offset_center = (x + border) + patch_size_wb*(y + border);
+        patch[pixel_counter] = interp_patch_array[offset_center];
+        sum += patch[pixel_counter];
+      }
+    }
+    float avg = sum / patch_area;
+
+    float var = 0.0;
+    pixel_counter = 0;
+    for(int y = 0; y < patch_size; ++y) {
+      for (int x = 0; x < patch_size; ++x, ++pixel_counter) {
+        var += std::pow(patch[pixel_counter] - avg, 2);
+      }
+    }
+    assert(patch_area > 1);
+    var /= (patch_area - 1);
+    float std = std::sqrt(var);
+    if(std < std_th)
+    {
+      valid_cache[feature_counter] = false;
+      continue;
+    }
+
     // fill ref_patch_cache and jacobian_cache
     pixel_counter = 0;
     for(int y = 0; y < patch_size; ++y)
@@ -407,7 +445,9 @@ void precomputeJacobiansAndRefPatches(
         jacobian_cache(7,jacobian_col) = estimate_beta  ? -1.0 : 0.0;
       }
     }
+
   }
+
 }
 
 void computeResidualsOfFrame(
@@ -423,7 +463,8 @@ void computeResidualsOfFrame(
     size_t& feature_counter, // 2
     std::vector<Vector2d>* match_pxs,
     ResidualCache& residual_cache,
-    VisibilityMask& visibility_mask)
+    VisibilityMask& visibility_mask,
+    ValidCache& valid_cache)
 {
   const cv::Mat& cur_img = cur_frame->img_pyr_.at(level);
   const int stride = cur_img.step;
@@ -435,6 +476,10 @@ void computeResidualsOfFrame(
 
   for(size_t i = 0; i < nr_features; ++i, ++feature_counter)
   {
+    // TODO (xie chen)
+    if(!valid_cache[feature_counter])
+      continue;
+
     Vector3ft xyz_ref = xyz_ref_cache.col(feature_counter);
     const Vector3d xyz_cur(T_cur_ref * xyz_ref.cast<double>());
     if(cur_frame->cam()->getType() ==
@@ -509,6 +554,7 @@ FloatType computeHessianAndGradient(
     const JacobianCache& jacobian_cache,
     const ResidualCache& residual_cache,
     const VisibilityMask& visibility_mask,
+    const ValidCache& valid_cache,
     const float weight_scale,
     const vk::solver::WeightFunctionPtr& weight_function,
     SparseImgAlign::HessianMatrix* H,
@@ -521,12 +567,17 @@ FloatType computeHessianAndGradient(
 
   for(size_t i = 0; i < mask_size; ++i)
   {
-    if(visibility_mask(i)==true)
+    if(visibility_mask(i) && valid_cache[i])
     {
       size_t patch_offset = i*patch_area;
       for(size_t j = 0; j < patch_area; ++j)
       {
         FloatType res = residual_cache(j,i);
+        if(std::abs(res) > 1e3)
+        {
+          std::cout << "稀疏光度对齐 res 过大： " << res << std::endl;
+          break;
+        }
 
         // Robustification.
         float weight = 1.0;

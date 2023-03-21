@@ -35,6 +35,8 @@ BaseOptions loadBaseOptions(const ros::NodeHandle& pnh, bool forward_default)
 {
   BaseOptions o;
   o.distance_th = vk::param<double>(pnh, "distance_th", 0.1);
+  o.rotation_th = vk::param<double>(pnh, "rotation_th", 1.0);
+
   o.max_n_kfs = vk::param<int>(pnh, "max_n_kfs", 5);
   o.use_imu = vk::param<bool>(pnh, "use_imu", false);
   o.trace_dir = vk::param<std::string>(pnh, "trace_dir", ros::package::getPath("svo")+"/trace");
@@ -60,6 +62,7 @@ BaseOptions loadBaseOptions(const ros::NodeHandle& pnh, bool forward_default)
   o.kfselect_min_disparity = vk::param<double>(pnh, "kfselect_min_disparity", 40);
   o.kfselect_min_num_frames_between_kfs = vk::param<int>(pnh, "kfselect_min_num_frames_between_kfs", 2);
   o.kfselect_backend_max_time_sec = vk::param<double>(pnh, "kfselect_backend_max_time_sec", 3.0);
+  o.std_th = vk::param<float>(pnh, "std_th", 10.0); // TODO
   o.img_align_max_level = vk::param<int>(pnh, "img_align_max_level", 4);
   o.img_align_min_level = vk::param<int>(pnh, "img_align_min_level", 2);
   o.img_align_robustification = vk::param<bool>(pnh, "img_align_robustification", false);
@@ -100,7 +103,12 @@ DepthFilterOptions loadDepthFilterOptions(const ros::NodeHandle& pnh,
                                           const CameraBundle::Ptr& ncam = nullptr)
 {
   DepthFilterOptions o;
-  o.overlap = ncam->overlap_; // TODO (xie chen)
+
+  // TODO (xie chen)
+  bool use_multi_cam = vk::param<bool>(pnh, "multi_cam", false);
+  if(use_multi_cam)
+     o.overlap = ncam->overlap_;
+
   o.max_search_level = vk::param<int>(pnh, "n_pyr_levels", 3) - 1;
   o.use_threaded_depthfilter =
       vk::param<bool>(pnh, "use_threaded_depthfilter", true);
@@ -190,11 +198,16 @@ ReprojectorOptions loadReprojectorOptions(const ros::NodeHandle& pnh)
   return o;
 }
 
-CameraBundle::Ptr loadCameraFromYaml(const ros::NodeHandle& pnh)
+CameraBundle::Ptr loadCameraFromYaml(const ros::NodeHandle& pnh, bool use_multi_cam=false)
 {
   std::string calib_file = vk::param<std::string>(pnh, "calib_file", "~/cam.yaml");
-  CameraBundle::Ptr ncam = CameraBundle::loadFromYaml(calib_file);
+  CameraBundle::Ptr ncam = CameraBundle::loadFromYaml(calib_file, use_multi_cam);
   std::cout << "loaded " << ncam->numCameras() << " cameras";
+
+  // TODO (xie chen)
+  if(!use_multi_cam)
+    ncam->pop_till_one();
+
   for(const auto& cam : ncam->getCameraVector())
     cam->printParameters(std::cout, "");
   return ncam;
@@ -433,10 +446,10 @@ void setInitialPose(const ros::NodeHandle& pnh, FrameHandlerBase& vo)
 }
 
 
-FrameHandlerMono::Ptr makeMono(const ros::NodeHandle& pnh, const CameraBundlePtr& cam)
+FrameHandlerMono::Ptr makeMono(const ros::NodeHandle& pnh, bool use_multi_cam, const CameraBundlePtr& cam)
 {
   // Create camera
-  CameraBundle::Ptr ncam = (cam) ? cam : loadCameraFromYaml(pnh); // 读取yaml配置文件
+  CameraBundle::Ptr ncam = (cam) ? cam : loadCameraFromYaml(pnh, use_multi_cam); // 读取yaml配置文件
 
   // TODO(xie chen): 注释掉这个以允许多相机
   if (ncam->numCameras() > 1)
@@ -465,10 +478,10 @@ FrameHandlerMono::Ptr makeMono(const ros::NodeHandle& pnh, const CameraBundlePtr
   return vo;
 }
 
-FrameHandlerMono::Ptr makeMono_multi(const ros::NodeHandle& pnh, const CameraBundlePtr& cam)
+FrameHandlerMono::Ptr makeMono_multi(const ros::NodeHandle& pnh, bool use_multi_cam, const CameraBundlePtr& cam)
 {
   // Create camera
-  CameraBundle::Ptr ncam = (cam) ? cam : loadCameraFromYaml(pnh); // 读取yaml配置文件
+  CameraBundle::Ptr ncam = (cam) ? cam : loadCameraFromYaml(pnh, use_multi_cam); // 读取yaml配置文件
 
   // SVO2前端在该类中实现
   FrameHandlerMono::Ptr vo =
@@ -480,7 +493,7 @@ FrameHandlerMono::Ptr makeMono_multi(const ros::NodeHandle& pnh, const CameraBun
                   loadReprojectorOptions(pnh), // 读取重投影相关的参数
                   loadTrackerOptions(pnh), // LK光流相关的参数
                   ncam, // camera的yaml文件
-                  true // use multi-camera
+                  use_multi_cam // use multi-camera
                  );
 
   // Get initial position and orientation of IMU
@@ -489,10 +502,10 @@ FrameHandlerMono::Ptr makeMono_multi(const ros::NodeHandle& pnh, const CameraBun
   return vo;
 }
 
-FrameHandlerStereo::Ptr makeStereo(const ros::NodeHandle& pnh, const CameraBundlePtr& cam)
+FrameHandlerStereo::Ptr makeStereo(const ros::NodeHandle& pnh, bool use_multi_cam, const CameraBundlePtr& cam)
 {
   // Load cameras
-  CameraBundle::Ptr ncam = (cam) ? cam : loadCameraFromYaml(pnh);
+  CameraBundle::Ptr ncam = (cam) ? cam : loadCameraFromYaml(pnh, use_multi_cam);
   if (ncam->numCameras() > 2)
   {
     LOG(WARNING) << "Load more cameras than needed, will erase from the end.";
@@ -519,10 +532,10 @@ FrameHandlerStereo::Ptr makeStereo(const ros::NodeHandle& pnh, const CameraBundl
   return vo;
 }
 
-FrameHandlerArray::Ptr makeArray(const ros::NodeHandle& pnh, const CameraBundlePtr& cam)
+FrameHandlerArray::Ptr makeArray(const ros::NodeHandle& pnh, bool use_multi_cam, const CameraBundlePtr& cam)
 {
   // Load cameras
-  CameraBundle::Ptr ncam = (cam) ? cam : loadCameraFromYaml(pnh);
+  CameraBundle::Ptr ncam = (cam) ? cam : loadCameraFromYaml(pnh, use_multi_cam);
 
   // Init VO
   InitializationOptions init_options = loadInitializationOptions(pnh);

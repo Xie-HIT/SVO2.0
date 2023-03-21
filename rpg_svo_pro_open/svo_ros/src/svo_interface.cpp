@@ -48,10 +48,12 @@ namespace svo {
 SvoInterface::SvoInterface(
     const PipelineType& pipeline_type,
     const ros::NodeHandle& nh,
-    const ros::NodeHandle& private_nh)
+    const ros::NodeHandle& private_nh,
+    bool use_multi_cam)
   : nh_(nh)
   , pnh_(private_nh)
   , pipeline_type_(pipeline_type)
+  , use_multi_cam_(use_multi_cam)
   , set_initial_attitude_from_gravity_(
       vk::param<bool>(pnh_, "set_initial_attitude_from_gravity", true))
   , automatic_reinitialization_(
@@ -85,16 +87,16 @@ SvoInterface::SvoInterface(
   switch (pipeline_type)
   {
     case PipelineType::kMono:
-      svo_ = factory::makeMono(pnh_);
+      svo_ = factory::makeMono(pnh_, use_multi_cam_);
       break;
     case PipelineType::kStereo:
-      svo_ = factory::makeStereo(pnh_);
+      svo_ = factory::makeStereo(pnh_, use_multi_cam_);
       break;
     case PipelineType::kArray:
-      svo_ = factory::makeArray(pnh_);
+      svo_ = factory::makeArray(pnh_, use_multi_cam_);
       break;
     case PipelineType::kMono_multi:
-      svo_ = factory::makeMono_multi(pnh_);
+      svo_ = factory::makeMono_multi(pnh_, use_multi_cam_);
       break;
     default:
       LOG(FATAL) << "Unknown pipeline";

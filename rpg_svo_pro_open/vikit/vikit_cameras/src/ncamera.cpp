@@ -23,7 +23,7 @@ NCamera::NCamera(
   initInternal();
 }
 
-NCamera::Ptr NCamera::loadFromYaml(const std::string& yaml_file)
+NCamera::Ptr NCamera::loadFromYaml(const std::string& yaml_file, bool use_multi_cam)
 {
   try {
     YAML::Node doc = YAML::LoadFile(yaml_file.c_str());
@@ -53,7 +53,6 @@ NCamera::Ptr NCamera::loadFromYaml(const std::string& yaml_file)
     const YAML::Node& overlap = doc["overlap"];
     assert(overlap.size() == 0 || overlap.size() == static_cast<size_t>(std::pow(cameras_node.size(), 2)));
     ncam->overlap_.resize(cameras_node.size());
-
     if(overlap.size())
     {
       for(size_t i=0; i<cameras_node.size(); ++i)

@@ -927,7 +927,7 @@ void LoopClosing::runPROnLatestKeyframe_v2(const size_t n_ignored_latest,
            << "s and query count " << num_queries_.back();
 }
 
-void LoopClosing::addFrameToPR(const svo::FrameBundlePtr last_frames_/* TODO (xie chen): 需要深拷贝 */)
+void LoopClosing::addFrameToPR(const svo::FrameBundlePtr& last_frames_/* FIXME (xie chen): 是否需要深拷贝 */)
 {
   // 必须要等到回环检测完成才能继续
   if (completed_flags_.size() > 1 && !completed_flags_.back())
@@ -936,7 +936,7 @@ void LoopClosing::addFrameToPR(const svo::FrameBundlePtr last_frames_/* TODO (xi
   }
 
   // TODO (xie chen)：多相机应轮询是否有回环
-  if(use_multi_cam_)
+  if(0/*use_multi_cam_*/)
   {
     svo_keyframe_count_++;
 

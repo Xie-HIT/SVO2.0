@@ -25,6 +25,7 @@ typedef Eigen::Matrix<FloatType, 8, Eigen::Dynamic, Eigen::ColMajor> JacobianCac
 typedef Eigen::Matrix<FloatType, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor> ResidualCache;
 typedef Eigen::Matrix<bool, Eigen::Dynamic, 1, Eigen::ColMajor> VisibilityMask;
 typedef Eigen::Matrix<FloatType, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor> RefPatchCache;
+typedef std::vector<bool> ValidCache;
 
 /// Optimize the pose of the frame by minimizing the photometric error of feature patches.
 class SparseImgAlign : public SparseImgAlignBase
@@ -58,6 +59,7 @@ private:
   ResidualCache residual_cache_; //<! residuals (size AreaPatch x #Patches)
   VisibilityMask visibility_mask_;//<! is Patch visible in current image? (size 1 x #Patches)
   RefPatchCache ref_patch_cache_; //<! residuals (size AreaPatch x #Patches)
+  ValidCache valid_cache_; // TODO (xie chen): 是否该像素点在直接法中考虑
 
 protected:
   /// Warp the (cur)rent image such that it aligns with the (ref)erence image
@@ -105,9 +107,11 @@ void precomputeJacobiansAndRefPatches(
     const int patch_size,
     const size_t nr_features,
     bool estimate_alpha, bool estimate_beta,
+    float std_th,
     size_t& feature_counter,
     JacobianCache& jacobian_cache,
-    RefPatchCache& ref_patch_cache);
+    RefPatchCache& ref_patch_cache,
+    ValidCache& valid_cache);
 
 // Fills ResidualCache and VisibilityMask
 void computeResidualsOfFrame(
@@ -123,7 +127,8 @@ void computeResidualsOfFrame(
     size_t& feature_counter,
     std::vector<Vector2d>* match_px,
     ResidualCache& residual_cache,
-    VisibilityMask& visibility_mask
+    VisibilityMask& visibility_mask,
+    ValidCache& valid_cache
     );
 
 // Compute Hessian and gradient
@@ -131,6 +136,7 @@ FloatType computeHessianAndGradient(
     const JacobianCache& jacobian_cache,
     const ResidualCache& residual_cache,
     const VisibilityMask& visibility_mask,
+    const ValidCache& valid_cache,
     const float weight_scale,
     const vk::solver::WeightFunctionPtr& weight_function,
     SparseImgAlign::HessianMatrix* H,

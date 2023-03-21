@@ -28,6 +28,7 @@ help(){
   echo "参数:  "
   echo "       -h    Help"
   echo "       -e    Don't run dataset, just try to evaluate"
+  echo "       -r    Remove exist folder and re-run"
   exit
 }
 
@@ -52,7 +53,7 @@ then
 fi
 
 # check dataset exist and run them
-for var in "Quad-Hard" # "Quad-Medium" "Quad-Hard"
+for var in "Quad-Medium" # "Quad-Medium" "Quad-Hard"
 do
   WORK_DIR=$EVALUATE_OUTPUT_DIR/$var
 
@@ -100,12 +101,19 @@ fi
   echo "-- Evaluating on $var..."
   sleep 5s
 
-  # transform to TUM format
+  # transform to TUM format, and transform pose from imu coordinate to base coordinate
   if ! [ -e $WORK_DIR/stamped_traj_estimate.txt ]
   then
     rosrun rpg_trajectory_evaluation bag_to_pose.py \
         $WORK_DIR/Evaluate-$var.bag \
         /svo/pose_imu --out=stamped_traj_estimate.txt
+
+    mv $WORK_DIR/stamped_traj_estimate.txt $WORK_DIR/stamped_traj_estimate_bak.txt
+    source ~/anaconda3/etc/profile.d/conda.sh
+    python3 ./transform_to_imu.py \
+    --input $WORK_DIR/stamped_traj_estimate_bak.txt \
+    --output $WORK_DIR/stamped_traj_estimate.txt
+    rm $WORK_DIR/stamped_traj_estimate_bak.txt
   fi
 
   # copy groundtruth to evaluate directory
@@ -115,6 +123,7 @@ fi
   fi
 
   # evaluate
-  cd $WORK_DIR || exit; evo_ape tum stamped_groundtruth.txt stamped_traj_estimate.txt -vap --n_to_align 100
-
+  # cd $WORK_DIR || exit; evo_ape tum stamped_groundtruth.txt stamped_traj_estimate.txt -vap --n_to_align 100
+  cd $WORK_DIR || exit; evo_rpe tum stamped_groundtruth.txt stamped_traj_estimate.txt -r angle_deg -a --n_to_align 100 --delta 1 --plot --plot_mode xyz
+  # cd $WORK_DIR || exit; evo_traj tum --ref stamped_groundtruth.txt stamped_traj_estimate.txt -ap --n_to_align 100
 done

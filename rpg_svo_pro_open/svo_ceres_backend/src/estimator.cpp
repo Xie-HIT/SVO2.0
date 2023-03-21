@@ -247,7 +247,7 @@ bool Estimator::addStates(const FrameBundleConstPtr& frame_bundle,
   // Now we deal with error terms
   CHECK_GE(states_.ids.size(), 1u);
 
-  // 加入 IMU 因子
+  // 加入因子
   // add initial prior or IMU errors
   if (states_.ids.size() == 1)
   {
@@ -300,6 +300,7 @@ bool Estimator::addStates(const FrameBundleConstPtr& frame_bundle,
             map_ptr_->parameterBlockPtr(
               changeIdType(nframe_id, IdType::ImuStates).asInteger()));
     }
+
   }
 
   // 如果估计相机和 IMU 之间的外参，就设为 ceres 优化状态

@@ -138,7 +138,7 @@ public:
 
   /* Function addFrameToPR adds a frame to PR pipeline if it is a keyframe and
    * runs it */
-  void addFrameToPR(const svo::FrameBundlePtr last_frames_);
+  void addFrameToPR(const svo::FrameBundlePtr& last_frames_);
 
   /* Function runPR: Runs place recognition online along with SVO pipeline */
   void runPROnLatestKeyframe(const size_t ignored_frames,

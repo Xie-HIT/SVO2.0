@@ -293,7 +293,8 @@ UpdateResult FrameHandlerMono::processFrame()
 
   // STEP 3: Pose & Structure Optimization
   // redundant when using ceres backend
-  if(bundle_adjustment_type_!=BundleAdjustmentType::kCeres)
+  /// TODO (xie chen) 注意这里原本是不等于!=，但我们变成等于==，以提升一点精度
+  if(bundle_adjustment_type_==BundleAdjustmentType::kCeres)
   {
     VLOG(40) << "===== Pose Optimization =====";
     n_total_observations = optimizePose();
@@ -303,6 +304,7 @@ UpdateResult FrameHandlerMono::processFrame()
                    << n_total_observations;
       return UpdateResult::kFailure;
     }
+
     optimizeStructure(new_frames_, options_.structure_optimization_max_pts, 5);
   }
 

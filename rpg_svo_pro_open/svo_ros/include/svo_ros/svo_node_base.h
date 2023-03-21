@@ -8,7 +8,7 @@ class SvoNodeBase {
  public:
   // Initializes glog, gflags and ROS.
   static void initThirdParty(int argc, char **argv);
-  static svo::PipelineType chooseType(const ros::NodeHandle& pnh);
+  static svo::PipelineType chooseType(const ros::NodeHandle& pnh, bool& use_multi_cam);
 
   SvoNodeBase(); // （!）构造函数
   void run();
@@ -17,6 +17,7 @@ class SvoNodeBase {
   ros::NodeHandle node_handle_;
   ros::NodeHandle private_node_handle_;
   svo::PipelineType type_; // 单目模式 或 双目模式
+  bool use_multi_cam_;
 
  public:
     // 读取ROS参数，makeMono（读取相机的yaml配置文件/FrameHandlerMono）生成SVO前端

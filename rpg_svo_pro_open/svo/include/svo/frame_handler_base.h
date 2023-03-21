@@ -95,6 +95,9 @@ struct BaseOptions
   /// This option is useful for in-flight initialization of SVO.
   bool init_use_att_and_depth = false;
 
+  // TODO (xie chen)
+  float std_th = 10.0;
+
   /// (!) During sparse image alignment (see [1]), we find the pose relative
   /// to the last frame by minimizing the photometric error between the frames.
   /// This KLT-style optimizer is pyramidal to allow more motion between two
@@ -193,6 +196,7 @@ struct BaseOptions
   /// 异常检测：若稀疏光度对齐之后的位置相对于 IMU 先验位置的距离超过这个阈值，则使用 IMU 先验
   /// 0 就是不使用稀释光度对齐
   double distance_th = 0.1;
+  double rotation_th = 1.0;
 
   /// EXPERIMENTAL Should IMU measurements be used.
   bool use_imu = false;

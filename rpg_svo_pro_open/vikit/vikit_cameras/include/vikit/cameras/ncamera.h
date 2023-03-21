@@ -1,5 +1,6 @@
 #pragma once
 
+#include <iostream>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -39,7 +40,7 @@ public:
   void operator=(const NCamera&) = delete;
 
   /// Load a camera rig form a yaml file. Returns a nullptr if the loading fails.
-  static std::shared_ptr<NCamera> loadFromYaml(const std::string& yaml_file);
+  static std::shared_ptr<NCamera> loadFromYaml(const std::string& yaml_file, bool use_multi_cam=false);
 
   /// Get the number of cameras.
   inline size_t getNumCameras() const { return cameras_.size(); }
@@ -81,6 +82,22 @@ public:
     CHECK_GT(N, 0);
     T_C_B_.erase(T_C_B_.begin() + N, T_C_B_.end());
     cameras_.erase(cameras_.begin() + N, cameras_.end());
+  }
+
+  inline void pop_till_one()
+  {
+    if(overlap_.size() > 1)
+    {
+      overlap_.clear();
+    }
+
+    if(cameras_.size() > 1)
+    {
+      while(cameras_.size() > 1)
+      {
+        cameras_.pop_back();
+      }
+    }
   }
 
 public:

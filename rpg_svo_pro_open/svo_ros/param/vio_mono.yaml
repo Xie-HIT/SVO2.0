@@ -5,9 +5,11 @@ max_n_kfs: 20 # svo frontend map size, change with camera number: 5n
 reprojector_max_n_kfs: 10 # Local map size. Larger is computationally more intensive. More reduces drift. 5
 kfselect_min_num_frames_between_kfs:  5  # increase this for sparse keyframes
 
-use_edgelets: False # whether use edge in frontend
+use_edgelets: True # whether use edge in frontend
 img_align_max_level: 5 # Increase this(4) level by one if the image is double the width and height (752x480). Newer College(720×540)
+std_th: 0.0 # std thresholds for sparse image alignment
 distance_th: 0.1 # error check, 0.0 means don't use sparse image alignment
+rotation_th: 5.0 # error check for rotation axis
 use_async_reprojectors: True # For multi-camera, change it to True for multithreading.
 
 alpha: 0.8 # loop closing happens after [alpha * 20 + 5] frames

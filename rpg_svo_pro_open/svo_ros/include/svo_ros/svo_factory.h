@@ -38,21 +38,25 @@ std::shared_ptr<GlobalMap> getGlobalMap(
 /// Factory for Mono-SVO.
 std::shared_ptr<FrameHandlerMono> makeMono(
     const ros::NodeHandle& pnh,
+    bool use_multi_cam = false,
     const CameraBundlePtr& cam = nullptr);
 
 /// Factory for Mono-multi-SVO. mono模块自己就支持多相机
 std::shared_ptr<FrameHandlerMono> makeMono_multi(
     const ros::NodeHandle& pnh,
+    bool use_multi_cam = false,
     const CameraBundlePtr& cam = nullptr);
 
 /// Factory for Stereo-SVO.
 std::shared_ptr<FrameHandlerStereo> makeStereo(
     const ros::NodeHandle& pnh,
+    bool use_multi_cam = false,
     const CameraBundlePtr& cam = nullptr);
 
 /// Factory for Camera-Array-SVO.
 std::shared_ptr<FrameHandlerArray> makeArray(
     const ros::NodeHandle& pnh,
+    bool use_multi_cam = false,
     const CameraBundlePtr& cam = nullptr);
 
 /// Factory for Camera-Array-SVO

@@ -53,6 +53,7 @@ public:
   std::shared_ptr<CeresBackendPublisher> ceres_backend_publisher_; // 后端
 
   CameraBundlePtr ncam_;
+  bool use_multi_cam_;
 
   // Parameters
   bool set_initial_attitude_from_gravity_ = true;
@@ -64,7 +65,8 @@ public:
 
   SvoInterface(const PipelineType& pipeline_type,
           const ros::NodeHandle& nh,
-          const ros::NodeHandle& private_nh);
+          const ros::NodeHandle& private_nh,
+          bool use_multi_cam=false);
 
   virtual ~SvoInterface();
 
