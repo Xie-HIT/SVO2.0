@@ -42,13 +42,15 @@ public:
   BundleId                      bundle_id_;
   int                           nframe_index_ = -1;     //!< Storage index in NFrame. 相机索引
   CameraPtr                     cam_;                   //!< Camera model. 指向基类指针
-  Transformation                T_f_w_;                 //!< Transform (f)rame from (w)orld.
+  Transformation                T_f_w_;                 //!< Transform (f)rame from (w)orld. T_cam_world
   ImgPyr                        img_pyr_;               //!< Image Pyramid.
   cv::Mat                       original_color_image_;
   // safe without the Eigen aligned allocator, since Position is 24 bytes
   std::vector<std::pair<int, Position>, Eigen::aligned_allocator<
   std::pair<int, Position> > > key_pts_;                //!< Five features and associated 3D points which are used to detect if two frames have overlapping field of view. store index + depth
   bool                          is_keyframe_ = false;   //!< Was this frames selected as keyframe?
+  bool                          is_backend_keyframe_ = true;   //!< TODO (xie chen): 区分是否是加入后端的关键帧
+  bool                          is_backend_imu_frame_ = true;   //!< TODO (xie chen): 区分是否是加入后端的普通关键帧
   int                           last_published_ts_;     //!< Timestamp of last publishing.
   Quaternion                    R_imu_world_;           //!< IMU Attitude provided by *external* attitude extimator
 
@@ -279,7 +281,7 @@ public:
 
   /// set new pose
   /// If setting T_f_w_ is desired, one should access T_f_w_ directly.
-  inline void set_T_w_imu(const Transformation& T_w_imu)
+  inline void set_T_w_imu(const Transformation& T_w_imu) // FIXME (xie chen): 名字有问题，应该是 set_T_w_cam，但输入是 T_w_imu
   {
     T_f_w_ = (T_w_imu * T_body_cam_).inverse();
   }
@@ -305,6 +307,8 @@ public:
 
   /// Was this frame selected as keyframe?
   inline bool isKeyframe() const { return is_keyframe_; }
+  inline bool isBackendKeyframe() const { return is_backend_keyframe_; }
+  inline bool isBackendImuframe() const { return is_backend_imu_frame_; }
 
   /// Return the pose of the frame in the (w)orld coordinate frame.
   inline Eigen::Vector3d pos() const { return T_world_cam().getPosition(); }

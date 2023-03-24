@@ -27,6 +27,9 @@ CeresBackendInterface::CeresBackendInterface(
 {
   type_ = BundleAdjustmentType::kCeres;
 
+  // TODO (xie chen)
+  backend_.use_multi_cam_ = options.use_multi_cam;
+
   // Setup modules
   if (options_.use_zero_motion_detection)
   {
@@ -90,7 +93,7 @@ void CeresBackendInterface::loadMapFromBundleAdjustment(
   std::lock_guard<std::mutex> lock(mutex_backend_);
 
   // Setup motion detector ----------------------------------------------------
-  if (motion_detector_) // 光流？
+  if (motion_detector_) // 计算光流, 后面决定是否添加零速度因子时使用
   {
     motion_detector_->setFrames(last_frames, new_frames);
   }
@@ -143,6 +146,7 @@ void CeresBackendInterface::loadMapFromBundleAdjustment(
     {
       DEBUG_CHECK(keyframe) << "Found nullptr keyframe";
       updateFrameStateWithBackend(keyframe, false); // 把 ceres 优化后的状态赋给 active_keyframes_ 中的内容，猜测其与前端的 keyframe 有关（即为前端的地图）
+      updateGroupState(keyframe);
       n_frames_updated++;
     }
     VLOG(3) << "Updated " << n_frames_updated << " frames in map.";
@@ -281,7 +285,11 @@ void CeresBackendInterface::bundleAdjustment(const FrameBundlePtr& frame_bundle)
   size_t num_new_observations = 0;
   for (FramePtr& frame : *frame_bundle)
   {
-    if (frame->isKeyframe())
+    // TODO (xie chen): 普通帧
+    if(!frame->isBackendImuframe())
+      backend_.setFrame(createNFrameId(frame->bundleId()), false);
+
+    if (frame->isKeyframe() && frame->isBackendKeyframe() /* TODO (xie chen) 设置后端关键帧 */)
     {
       backend_.setKeyframe(createNFrameId(frame->bundleId()), true);
       active_keyframes_.push_back(frame); /// 关键帧加入 active_keyframes_
@@ -517,6 +525,26 @@ bool CeresBackendInterface::addStatesAndInertialMeasurementsToBackend(
   VLOG(10) << "Backend: Added " << imu_measurements.size() << " inertial "
                                                               "measurements.";
   return true;
+}
+
+// TODO (xie chen)
+void CeresBackendInterface::updateGroupState(const FramePtr& backend_keyframe)
+{
+  if(backend_keyframe->group_.size() == 1)
+    return;
+
+  for(auto& pair: backend_keyframe->group_)
+  {
+    if(pair.first == backend_keyframe->id())
+      continue;
+
+    FrameWeakPtr keyframe_weak = pair.second;
+    if(keyframe_weak.expired()) // 超出前端窗口就会被销毁，这时候我们也就不用更新了
+      return;
+
+    FramePtr keyframe = keyframe_weak.lock();
+    keyframe->set_T_w_imu(backend_keyframe->T_world_imu());
+  }
 }
 
 void CeresBackendInterface::updateFrameStateWithBackend(

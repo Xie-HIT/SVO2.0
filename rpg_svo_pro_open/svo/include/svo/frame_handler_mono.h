@@ -117,6 +117,10 @@ protected:
 
   /// Reset the frame handler. Implement in derived class.
   virtual void resetAll() override;
+
+  /// TODO (xie chen): 关键帧选择策略
+  void greedy_select();
+  double compute_score(const FramePtr& frame);
 };
 
 } // namespace svo

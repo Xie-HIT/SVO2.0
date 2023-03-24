@@ -53,7 +53,7 @@ then
 fi
 
 # check dataset exist and run them
-for var in "Quad-Medium" # "Quad-Medium" "Quad-Hard"
+for var in "Quad-Hard" # "Quad-Medium" "Quad-Hard"
 do
   WORK_DIR=$EVALUATE_OUTPUT_DIR/$var
 
@@ -123,7 +123,7 @@ fi
   fi
 
   # evaluate
-  # cd $WORK_DIR || exit; evo_ape tum stamped_groundtruth.txt stamped_traj_estimate.txt -vap --n_to_align 100
+  cd $WORK_DIR || exit; evo_ape tum stamped_groundtruth.txt stamped_traj_estimate.txt -vap --n_to_align 100
   cd $WORK_DIR || exit; evo_rpe tum stamped_groundtruth.txt stamped_traj_estimate.txt -r angle_deg -a --n_to_align 100 --delta 1 --plot --plot_mode xyz
-  # cd $WORK_DIR || exit; evo_traj tum --ref stamped_groundtruth.txt stamped_traj_estimate.txt -ap --n_to_align 100
+  cd $WORK_DIR || exit; evo_traj tum --ref stamped_groundtruth.txt stamped_traj_estimate.txt -ap --n_to_align 100
 done

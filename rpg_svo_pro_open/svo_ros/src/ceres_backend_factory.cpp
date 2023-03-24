@@ -47,8 +47,9 @@ CeresBackendInterface::Ptr makeBackend(const ros::NodeHandle& pnh,
   backend_options.num_imu_frames =
       static_cast<size_t>(vk::param<int>(pnh, "ceres_num_imu_frames", 3));
   /// Number of keyframes of ceres backend
+  // TODO (xie chen): 将 max_n_kfs 替换成 max_backend_n_kfs
   backend_options.num_keyframes =
-      static_cast<size_t>(vk::param<int>(pnh, "max_n_kfs", 5));
+      static_cast<size_t>(vk::param<int>(pnh, "max_backend_n_kfs", 5));
   /// Maximum time used to optimize [s]. Set negative to always do the
   /// maximum number of iterations.
   backend_options.max_iteration_time =
@@ -92,6 +93,9 @@ CeresBackendInterface::Ptr makeBackend(const ros::NodeHandle& pnh,
         vk::param<double>(pnh, "backend_extrinsics_pos_sigma_meter", 0.05);
   ba_interface_options.extrinsics_pos_sigma_meter =
         vk::param<double>(pnh, "backend_extrinsics_rot_sigma_deg", 5.0) / 180.0 * M_PI;
+
+  // 多相机
+  ba_interface_options.use_multi_cam = vk::param<bool>(pnh, "multi_cam", false);
 
   CeresBackendInterface::Ptr ba_interface =
       std::make_shared<CeresBackendInterface>(ba_interface_options,

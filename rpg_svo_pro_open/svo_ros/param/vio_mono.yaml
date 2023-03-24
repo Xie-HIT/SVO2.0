@@ -1,9 +1,10 @@
 ################################
 ##### Important parameters #####
 ################################
-max_n_kfs: 20 # svo frontend map size, change with camera number: 5n
+max_n_kfs: 20 # svo frontend map size, change with camera number: 5n || 20 10 5
 reprojector_max_n_kfs: 10 # Local map size. Larger is computationally more intensive. More reduces drift. 5
 kfselect_min_num_frames_between_kfs:  5  # increase this for sparse keyframes
+max_backend_n_kfs: 20  # number of keyframes in backend
 
 use_edgelets: True # whether use edge in frontend
 img_align_max_level: 5 # Increase this(4) level by one if the image is double the width and height (752x480). Newer College(720×540)

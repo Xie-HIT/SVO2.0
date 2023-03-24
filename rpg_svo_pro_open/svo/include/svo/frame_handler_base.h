@@ -395,6 +395,9 @@ public:
   /// 关键帧候选组
   std::vector<FramePtr> keyframe_candidates_;
 
+  /// 初始化帧的 id
+  size_t init_kf_id_ = 0;
+
   /// Options for BaseFrameHandler module
   BaseOptions options_;
 

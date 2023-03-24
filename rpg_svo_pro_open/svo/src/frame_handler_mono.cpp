@@ -100,6 +100,10 @@ UpdateResult FrameHandlerMono::processFirstFrame()
     for(size_t i=0; i<initializer_->frames_ref_->frames_.size(); ++i)
     {
       const FramePtr& frame = initializer_->frames_ref_->frames_.at(i);
+
+      if(i == 0)
+        init_kf_id_ = frame->id();
+
       frame->setKeyframe();
       if(bundle_adjustment_type_==BundleAdjustmentType::kCeres)
       {
@@ -141,7 +145,7 @@ UpdateResult FrameHandlerMono::processFirstFrame()
   // TODO (xie chen): Add NEW multi-cameras to keyframe, map, depth filter
   // make new frame keyframe
   new_frames_->setKeyframe();
-  if(0) // TODO (xie chen): 暂不将多相机地图点加入深度滤波器，因为之后尺度会调整
+  if(0) // TODO (xie chen): 不确定是否应将多相机地图点加入深度滤波器，因为之后尺度会调整
   {
     for(size_t i=0; i<newFrames().size(); ++i)
     {
@@ -344,6 +348,16 @@ UpdateResult FrameHandlerMono::processFrame()
   initializer_->setDepthPrior(depth_median_[0]);
   initializer_->have_depth_prior_ = true;
 
+//  // FIXME (xie chen): 后端普通帧只选择前两个相机
+//  if(newFrames().size() > 2)
+//  {
+//    for(size_t i=2; i<newFrames().size(); ++i)
+//    {
+//      const FramePtr& newFrame = newFrames()[i];
+//      newFrame->is_backend_imu_frame_ = false;
+//    }
+//  }
+
   // TODO (xie chen): 多相机的关键帧选取策略
   if(use_multi_cam_)
   {
@@ -363,9 +377,24 @@ UpdateResult FrameHandlerMono::processFrame()
         CHECK(!overlap_kfs_.empty());
       }
     }
-    std::cout << "update " << keyframe_candidates_.size() << " new keyframes" << std::endl;
-    if(keyframe_candidates_.empty())
+
+    if(!keyframe_candidates_.empty())
+    {
+      for(const FramePtr& newFrame: keyframe_candidates_)
+      {
+        upgradeSeedsToFeatures(newFrame);
+      }
+
+      // TODO (xie chen): 包含 Seed 的跟踪，从多帧中筛选信息量最大的一帧
+      greedy_select();
+
+      std::cout << "update " << keyframe_candidates_.size() << " new keyframes" << std::endl;
+    }
+    else
+    {
+      std::cout << "update " << keyframe_candidates_.size() << " new keyframes" << std::endl;
       return UpdateResult::kDefault;
+    }
   }
   else
   {
@@ -426,10 +455,10 @@ UpdateResult FrameHandlerMono::processFrame()
   }
   if(use_multi_cam_)
   {
-    for(const FramePtr& newFrame: keyframe_candidates_)
-    {
-      upgradeSeedsToFeatures(newFrame);
-    }
+//    for(const FramePtr& newFrame: keyframe_candidates_)
+//    {
+//      upgradeSeedsToFeatures(newFrame);
+//    }
   }
   else
   {
@@ -509,6 +538,109 @@ UpdateResult FrameHandlerMono::processFrame()
     }
   }
   return UpdateResult::kKeyframe;
+}
+
+// TODO (xie chen): 关键帧选择策略
+void FrameHandlerMono::greedy_select()
+{
+  if(keyframe_candidates_.size() == 1)
+    return;
+
+  // TEST ***
+  double max_score = -1.0;
+  size_t max_score_id = -1;
+  for(size_t i=0; i<keyframe_candidates_.size(); ++i)
+  {
+    FramePtr keyframe_candidate = keyframe_candidates_[i];
+    double score = compute_score(keyframe_candidate);
+    if(score > max_score)
+    {
+      max_score = score;
+      max_score_id = i;
+    }
+  }
+
+  for(size_t i=0; i<keyframe_candidates_.size(); ++i)
+  {
+    if(i == max_score_id)
+      continue;
+    keyframe_candidates_[i]->is_backend_keyframe_ = false;
+  }
+}
+
+double FrameHandlerMono::compute_score(const FramePtr& frame)
+{
+  // FIXME (xie chen): 计算信息量，我也不知道最正确的计算方式是什么，下面的（启发式/玄学）方式暂且有效
+  double score = 0.0;
+
+  std::vector<FramePtr> active_keyframes;
+  bundle_adjustment_->getAllActiveKeyframes(&active_keyframes);
+  double depth_median, depth_min, depth_max;
+  double depth_median_avg = 0.0;
+  int count = 0;
+  for(const auto& active_keyframe: active_keyframes)
+  {
+    if(frame_utils::getSceneDepth(active_keyframe,depth_median, depth_min, depth_max))
+    {
+      depth_median_avg += depth_median;
+      ++count;
+    }
+  }
+  depth_median_avg /= count;
+
+  double lambda = 0.0;
+  double lambda_z = 1.0;
+  for(size_t i=0; i<frame->num_features_; ++i)
+  {
+    if(frame->landmark_vec_[i])
+    {
+      // Step1: 共视分数，倾向于被后端 Map 观测多的点
+      /*
+      size_t cnt = 0;
+      for(const auto& active_keyframe: active_keyframes)
+      {
+        Eigen::Vector2d px_top_left(0.0, 0.0);
+        Eigen::Vector3d f_top_left;
+        active_keyframe->cam_->backProject3(px_top_left, &f_top_left);
+        f_top_left.normalize();
+        const Eigen::Vector3d z(0.0, 0.0, 1.0);
+        const double min_cos = f_top_left.dot(z);
+
+        Eigen::Vector3d xyz_cam = active_keyframe->T_f_w_ * frame->landmark_vec_[i]->pos();
+        const double cur_cos = xyz_cam.normalized().dot(z);
+        if (cur_cos > min_cos) // 可能被看见
+        {
+          ++cnt;
+          score += cur_cos;
+        }
+      }
+      score += lambda * std::pow(1.1, cnt);
+       */
+
+      // Step2: 深度分数，倾向于深度较近的点
+      Position xyz_world = frame->landmark_vec_[i]->pos();
+      Vector3d xyz_cam = frame->T_cam_world() * xyz_world;
+      if(xyz_world[2] > 0) // FIXME (xie chen): 我不知道为什么深度能小于零 ?
+      {
+        if(static_cast<bool>(depth_median_avg))
+        {
+          double delta = xyz_world[2] - depth_median_avg;
+          double score_z = delta<5.0? 100.0: 5.0/delta;
+          score += lambda_z * score_z;
+        }
+        else
+        {
+          double score_z = xyz_world[2]<1.0? 1.0: 1.0/xyz_world[2];
+          score += lambda_z * score_z;
+        }
+      }
+    }
+  }
+
+  if(frame->getNFrameIndex() == 0 || frame->getNFrameIndex() == 1)
+    score += 50.0;
+
+  return score;
 }
 
 UpdateResult FrameHandlerMono::relocalizeFrame(

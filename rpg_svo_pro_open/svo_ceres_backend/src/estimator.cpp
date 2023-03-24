@@ -227,7 +227,7 @@ bool Estimator::addStates(const FrameBundleConstPtr& frame_bundle,
   {
     return false;
   }
-  states_.addState(nframe_id, false, timestamp);
+  states_.addState(nframe_id, false, true, timestamp);
 
   // 把当前帧的 IMU 状态加入 ceres 优化状态
   // add IMU states
@@ -657,18 +657,43 @@ bool Estimator::applyMarginalizationStrategy(
 
   // keep the newest numImuFrames
   std::vector<BackendId>::reverse_iterator rit_id = states_.ids.rbegin();
-  std::vector<bool>::reverse_iterator rit_keyframe =
-      states_.is_keyframe.rbegin();
-  for (size_t k = 0; k < num_imu_frames; ++k)
+  std::vector<bool>::reverse_iterator rit_keyframe = states_.is_keyframe.rbegin();
+  std::vector<bool>::reverse_iterator rit_imu_frame = states_.is_backend_imu_frame.rbegin();
+  if(0) // TODO (xie chen)：展开普通帧，否则直接按数量选取普通帧，由于多相机的存在，会变成一团，长度不够
   {
-    ++rit_id;
-    ++rit_keyframe;
-    if (rit_id==states_.ids.rend())
+    size_t total_imu_frames = 0;
+    while(total_imu_frames < num_imu_frames)
     {
-      // nothing to do.
-      return true;
+      if((*rit_keyframe) || (*rit_imu_frame)) // 关键帧或者需要的普通帧就累积
+        ++total_imu_frames;  // 累积帧
+      else
+      {
+        // marginalize_pose_frames.push_back(*rit_id); // 不需要的普通帧就丢弃
+      }
+
+      ++rit_id;
+      ++rit_keyframe;
+      if (rit_id==states_.ids.rend())
+      {
+        // nothing to do.
+        return true;
+      }
     }
   }
+  else
+  {
+    for (size_t k = 0; k < num_imu_frames; ++k) // 跳过一些普通帧
+    {
+      ++rit_id;
+      ++rit_keyframe;
+      if (rit_id==states_.ids.rend())
+      {
+        // nothing to do.
+        return true;
+      }
+    }
+  }
+
   // if not, continue looping the rest of the states
 
   // remove linear marginalizationError, if existing
@@ -693,7 +718,7 @@ bool Estimator::applyMarginalizationStrategy(
 
   // distinguish if we marginalize everything or everything but pose
   std::vector<BackendId> marginalize_pose_frames; // 待边缘的帧：不需要的普通帧
-  std::vector<BackendId> marginalize_all_but_pose_frames; // 在 IMU window（一个当前帧附件的普通帧窗口）之外的帧，只保留位姿
+  std::vector<BackendId> marginalize_all_but_pose_frames; // 在 IMU window（一个当前帧附近的普通帧窗口）之外的帧，只保留位姿
   std::vector<BackendId> all_linearized_frames;
   size_t counted_keyframes = 0;
   // Note: rit is now pointing to the first frame not in the sliding window
@@ -703,7 +728,7 @@ bool Estimator::applyMarginalizationStrategy(
     // we marginalize in two cases
     //   * a frame outside the imu window but is not a keyframe
     //   * the oldest keyframe when we have enough keyframe
-    if (!(*rit_keyframe) || counted_keyframes >= num_keyframes)
+    if (!(*rit_keyframe) /* 如果不是关键帧，即如果是普通帧 */ || counted_keyframes >= num_keyframes)
     {
       marginalize_pose_frames.push_back(*rit_id); // imu窗口外的普通帧就不要了
     }

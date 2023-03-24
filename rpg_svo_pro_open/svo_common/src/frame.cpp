@@ -230,7 +230,7 @@ void Frame::setKeyPoints()
 bool Frame::isVisible(const Eigen::Vector3d& xyz_w,
                       Eigen::Vector2d* px) const
 {
-  Eigen::Vector3d xyz_f = T_f_w_*xyz_w;
+  Eigen::Vector3d xyz_f = T_f_w_*xyz_w; // 相机坐标系下的 3D 点
   if (cam_->getType() == Camera::Type::kPinhole)
   {
     Eigen::Vector2d px_top_left(0.0, 0.0);

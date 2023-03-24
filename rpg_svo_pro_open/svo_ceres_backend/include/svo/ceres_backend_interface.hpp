@@ -102,6 +102,9 @@ struct CeresBackendInterfaceOptions
   bool refine_extrinsics = false;
   double extrinsics_pos_sigma_meter = 0.05;
   double extrinsics_rot_sigma_rad = 5.0 / 180.0 * M_PI;
+
+  /// 是否使用多相机
+  bool use_multi_cam = false;
 };
 
 typedef std::pair<size_t, size_t> CorrespondencePair;
@@ -279,6 +282,10 @@ protected:
    */
   void updateFrameStateWithBackend(const FramePtr& frame,
                                    const bool get_speed_bias);
+
+  // TODO (xie chen)
+  void updateGroupState(const FramePtr& frame);
+
   void updateBundleStateWithBackend(const FrameBundlePtr& frames,
                                     const bool get_speed_bias);
 

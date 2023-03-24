@@ -76,15 +76,18 @@ struct States
   // ordered from oldest to newest.
   std::vector<BackendId> ids;
   std::vector<bool> is_keyframe;
+  std::vector<bool> is_backend_imu_frame;
+
   std::vector<double> timestamps;
 
   States() = default;
 
-  void addState(BackendId id, bool keyframe, double timestamp)
+  void addState(BackendId id, bool keyframe, bool is_imu_frame, double timestamp)
   {
     DEBUG_CHECK(id.type() == IdType::NFrame);
     ids.push_back(id);
     is_keyframe.push_back(keyframe);
+    is_backend_imu_frame.push_back(is_imu_frame);
     timestamps.push_back(timestamp);
   }
 
@@ -95,6 +98,7 @@ struct States
     {
       ids.erase(ids.begin() + slot.first);
       is_keyframe.erase(is_keyframe.begin() + slot.first);
+      is_backend_imu_frame.erase(is_backend_imu_frame.begin() + slot.first);
       timestamps.erase(timestamps.begin() + slot.first);
       return true;
     }
@@ -591,12 +595,21 @@ class Estimator
   /// @brief Set whether a frame is a keyframe or not.
   /// @param[in] nframe_id The frame bundle ID.
   /// @param[in] is_keyframe Whether or not keyrame.
-  void setKeyframe(BackendId nframe_id, bool is_keyframe)
+  void setKeyframe(BackendId nframe_id, bool is_keyframe/* true */)
   {
     auto slot = states_.findSlot(nframe_id);
-    if (slot.second)
+    if (slot.second) // 如果是 states_ 中的已有帧
     {
       states_.is_keyframe[slot.first] = is_keyframe;
+    }
+  }
+
+  void setFrame(BackendId nframe_id, bool is_backend_imu_frame/* false */)
+  {
+    auto slot = states_.findSlot(nframe_id);
+    if (slot.second) // 如果是 states_ 中的已有帧
+    {
+      states_.is_backend_imu_frame[slot.first] = is_backend_imu_frame;
     }
   }
 
@@ -707,6 +720,9 @@ class Estimator
   //
   size_t min_num_3d_points_for_fixation_ = 10u;
 
+  // 是否使用多相机
+  bool use_multi_cam_;
+
  private:
 
   /**
@@ -762,6 +778,7 @@ class Estimator
   // fixation
   std::set<uint64_t> fixed_frame_parameter_ids_;
   std::set<uint64_t> fixed_landmark_parameter_ids_;
+
 };
 
 }  // namespace svo
