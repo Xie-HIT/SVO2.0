@@ -105,6 +105,9 @@ struct CeresBackendInterfaceOptions
 
   /// 是否使用多相机
   bool use_multi_cam = false;
+
+  /// z 轴先验
+  double information_z = 1.0e1;
 };
 
 typedef std::pair<size_t, size_t> CorrespondencePair;
@@ -119,6 +122,9 @@ public:
   CeresBackendInterfaceOptions options_;
   CeresBackendOptions optimizer_options_;
 
+  /// z flag: false 代表重新计算地平面约束，true 代表维持上一个地平面约束
+  bool z_flag_ = false;
+  double diff_z_ = 0.0;
 
   CeresBackendInterface(const CeresBackendInterfaceOptions& options,
                         const CeresBackendOptions& optimizer_options,
@@ -126,6 +132,26 @@ public:
                         const CameraBundlePtr& camera_bundle);
 
   ~CeresBackendInterface();
+
+  inline void set_z_flag(bool z_flag) override
+  {
+    z_flag_ = z_flag;
+  }
+
+  inline bool get_z_flag() override
+  {
+    return z_flag_;
+  }
+
+  inline void set_diff_z(double diff_z) override
+  {
+    diff_z_ = diff_z;
+  }
+
+  inline double get_diff_z() override
+  {
+    return diff_z_;
+  }
 
   /**
    * @brief This is called BEFORE frame is processed in frontend

@@ -88,6 +88,14 @@ public:
 
   virtual void getLastState(ViNodeState* state) const = 0;
 
+  virtual void set_z_flag(bool z_flag) = 0;
+
+  virtual inline bool get_z_flag() = 0;
+
+  virtual void set_diff_z(double diff_z) = 0;
+
+  virtual inline double get_diff_z() = 0;
+
 protected:
   BundleAdjustmentType type_ = BundleAdjustmentType::kNone;
 };

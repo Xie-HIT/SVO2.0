@@ -29,6 +29,7 @@ CeresBackendInterface::CeresBackendInterface(
 
   // TODO (xie chen)
   backend_.use_multi_cam_ = options.use_multi_cam;
+  backend_.information_z_ = options.information_z;
 
   // Setup modules
   if (options_.use_zero_motion_detection)
@@ -747,6 +748,19 @@ void CeresBackendInterface::optimizationLoop()
                                timers_[last_optimized_nframe_.load()].stop());
         g_permon_backend_->writeToFile();
         timers_.erase(timers_.find(last_optimized_nframe_.load()));
+      }
+
+      // TODO (xie chen): 修改 z
+      if(backend_.use_multi_cam_)
+      {
+        Transformation T_WS;
+        backend_.get_T_WS(last_optimized_nframe_.load(), T_WS);
+        static int cnt = 1;
+        if(!get_z_flag()) // false 则重新积累地平面约束
+          cnt = 1;
+        backend_.last_z_ = (1 - 1.0/cnt) * backend_.last_z_ + 1.0/cnt * T_WS.getPosition()[2];
+        backend_.information_z_ *= exp(-std::pow(get_diff_z(), 2) / 0.05);
+        ++cnt;
       }
 
       // Publish pose and visualize makers

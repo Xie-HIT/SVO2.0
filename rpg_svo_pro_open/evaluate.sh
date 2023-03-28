@@ -80,7 +80,7 @@ do
 if ! [ $SKIP ]
 then
   gnome-terminal --tab  -q --command="bash -c 'roslaunch svo_ros newer_college_vio_multicam.launch; $SHELL'" \
-  --tab -q --command="bash -c 'cd /home/xgrids/SLAM数据集/Newer_College/Collection1/$var; rosbag play -d 10 $var.bag'" \
+  --tab -q --command="bash -c 'cd /home/xgrids/SLAM数据集/Newer_College/Collection1/$var; rosbag play -r 1 -d 10 $var.bag'" \
   --tab -q --command="bash -c 'cd $WORK_DIR; rosbag record --output-name=Evaluate-$var /svo/pose_imu __name:=my_bag; rosnode kill /my_bag'"
 fi
 
@@ -124,6 +124,6 @@ fi
 
   # evaluate
   cd $WORK_DIR || exit; evo_ape tum stamped_groundtruth.txt stamped_traj_estimate.txt -vap --n_to_align 100
-  cd $WORK_DIR || exit; evo_rpe tum stamped_groundtruth.txt stamped_traj_estimate.txt -r angle_deg -a --n_to_align 100 --delta 1 --plot --plot_mode xyz
+  cd $WORK_DIR || exit; evo_rpe tum stamped_groundtruth.txt stamped_traj_estimate.txt -r full -a --n_to_align 100 --delta 1 --plot --plot_mode xyz
   cd $WORK_DIR || exit; evo_traj tum --ref stamped_groundtruth.txt stamped_traj_estimate.txt -ap --n_to_align 100
 done

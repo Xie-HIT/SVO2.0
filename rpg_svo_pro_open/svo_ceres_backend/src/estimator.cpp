@@ -281,6 +281,20 @@ bool Estimator::addStates(const FrameBundleConstPtr& frame_bundle,
   }
   else
   {
+    // TODO (xie chen): 加一个先验因子，给 z 轴一个先验
+    if(use_multi_cam_)
+    {
+      Eigen::Matrix<double, 6, 1> pose;
+      pose << 0, 0, last_z_, 0, 0, 0;
+      Transformation T{pose};
+      Eigen::Matrix<double,6,6> information = Eigen::Matrix<double,6,6>::Zero();
+      information(2, 2) = information_z_;
+      std::shared_ptr<ceres_backend::PoseError > pose_error =
+              std::make_shared<ceres_backend::PoseError>(T, information); // 先验位姿残差
+      map_ptr_->addResidualBlock(pose_error, nullptr,
+                                 map_ptr_->parameterBlockPtr(nframe_id.asInteger()));
+    }
+
     // IMU 预积分因子
     const BackendId last_nframe_id = states_.ids[states_.ids.size() - 2];
     for (size_t i = 0; i < imu_parameters_.size(); ++i)
@@ -294,11 +308,9 @@ bool Estimator::addStates(const FrameBundleConstPtr& frame_bundle,
             imuError,
             nullptr,
             map_ptr_->parameterBlockPtr(last_nframe_id.asInteger()),
-            map_ptr_->parameterBlockPtr(
-              changeIdType(last_nframe_id, IdType::ImuStates).asInteger()),
+            map_ptr_->parameterBlockPtr(changeIdType(last_nframe_id, IdType::ImuStates).asInteger()),
             map_ptr_->parameterBlockPtr(nframe_id.asInteger()),
-            map_ptr_->parameterBlockPtr(
-              changeIdType(nframe_id, IdType::ImuStates).asInteger()));
+            map_ptr_->parameterBlockPtr(changeIdType(nframe_id, IdType::ImuStates).asInteger()));
     }
 
   }

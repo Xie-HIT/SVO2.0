@@ -150,6 +150,8 @@ bool AbstractInitialization::trackFeaturesAndCheckDisparity_v2(const FrameBundle
 InitResult HomographyInit::addFrameBundle(
     const FrameBundlePtr& frames_cur)
 {
+  std::cout << "==============  HomographyInit  ==============" << std::endl;
+
   // Track and detect features.
   if(!trackFeaturesAndCheckDisparity(frames_cur))
     return InitResult::kTracking;
@@ -252,6 +254,8 @@ public:
 InitResult TwoPointInit::addFrameBundle(
     const FrameBundlePtr& frames_cur)
 {
+  std::cout << "==============  TwoPointInit  ==============" << std::endl;
+
 #ifdef SVO_USE_OPENGV
   if(!have_rotation_prior_)
   {
@@ -328,7 +332,7 @@ InitResult FivePointInit::addFrameBundle(
     const FrameBundlePtr& frames_cur)
 {
 #ifdef SVO_USE_OPENGV
-  std::cout << "++++++++++++++++  FivePointInit  ++++++++++++++++" << std::endl;
+  std::cout << "==============  FivePointInit  ==============" << std::endl;
   // Track and detect features.
   if(!trackFeaturesAndCheckDisparity(frames_cur))
     return InitResult::kTracking;
@@ -474,6 +478,8 @@ InitResult FivePointInit::addFrameBundle_v2(
 
 InitResult OneShotInit::addFrameBundle(const FrameBundlePtr &frames_cur)
 {
+  std::cout << "==============  OneShotInit  ==============" << std::endl;
+
   CHECK(frames_cur->size() == 1) << "OneShot Initialization doesn't work with Camera Array";
 
   // Track and detect features.

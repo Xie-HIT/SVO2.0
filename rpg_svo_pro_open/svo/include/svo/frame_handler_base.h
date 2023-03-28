@@ -395,8 +395,11 @@ public:
   /// 关键帧候选组
   std::vector<FramePtr> keyframe_candidates_;
 
-  /// 初始化帧的 id
-  size_t init_kf_id_ = 0;
+  /// 初始化相机组的 id
+  size_t init_kf_bundle_id_ = 0;
+
+  /// 上一个 z
+  double last_frontend_z_ = std::numeric_limits<double>::max();
 
   /// Options for BaseFrameHandler module
   BaseOptions options_;

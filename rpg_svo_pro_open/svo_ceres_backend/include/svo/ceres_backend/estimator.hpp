@@ -650,6 +650,9 @@ class Estimator
       const uint64_t id, std::set<uint64_t>* id_set)
   {
     auto it = std::find(id_set->begin(), id_set->end(), id);
+    // FIXME (xie chen): 我不知道为什么不加会报错，加上这个 return 产生的影响是什么也不清楚，猜测是重复删除了
+    if(use_multi_cam_ && it == id_set->end())
+      return;
     CHECK(it != id_set->end()) << id_set->size() << ", " << id;
     id_set->erase(it);
   }
@@ -722,6 +725,10 @@ class Estimator
 
   // 是否使用多相机
   bool use_multi_cam_;
+
+  /// TODO (xie chen)
+  double last_z_;
+  double information_z_ = 1.0e1;
 
  private:
 

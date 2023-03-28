@@ -96,6 +96,7 @@ CeresBackendInterface::Ptr makeBackend(const ros::NodeHandle& pnh,
 
   // 多相机
   ba_interface_options.use_multi_cam = vk::param<bool>(pnh, "multi_cam", false);
+  ba_interface_options.information_z = vk::param<double>(pnh, "information_z", 1.0e1);
 
   CeresBackendInterface::Ptr ba_interface =
       std::make_shared<CeresBackendInterface>(ba_interface_options,

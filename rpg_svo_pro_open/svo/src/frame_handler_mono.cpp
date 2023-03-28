@@ -102,7 +102,7 @@ UpdateResult FrameHandlerMono::processFirstFrame()
       const FramePtr& frame = initializer_->frames_ref_->frames_.at(i);
 
       if(i == 0)
-        init_kf_id_ = frame->id();
+        init_kf_bundle_id_ = frame->bundleId();
 
       frame->setKeyframe();
       if(bundle_adjustment_type_==BundleAdjustmentType::kCeres)
@@ -298,7 +298,7 @@ UpdateResult FrameHandlerMono::processFrame()
   // STEP 3: Pose & Structure Optimization
   // redundant when using ceres backend
   /// TODO (xie chen) 注意这里原本是不等于!=，但我们变成等于==，以提升一点精度
-  if(bundle_adjustment_type_==BundleAdjustmentType::kCeres)
+  if(bundle_adjustment_type_ == BundleAdjustmentType::kCeres)
   {
     VLOG(40) << "===== Pose Optimization =====";
     n_total_observations = optimizePose();
@@ -310,6 +310,25 @@ UpdateResult FrameHandlerMono::processFrame()
     }
 
     optimizeStructure(new_frames_, options_.structure_optimization_max_pts, 5);
+  }
+
+  // TODO (xie chen): 检测 z 轴的运动是否足够，不够则在后端加入地面约束
+  double new_frontend_z = new_frames_->get_T_W_B().getPosition()[2];
+  double diff_z = fabs(new_frontend_z - last_frontend_z_);
+  if(last_frontend_z_ == std::numeric_limits<double>::max() || newFrame()->bundleId() - init_kf_bundle_id_ < 10)
+  {
+    last_frontend_z_ = new_frontend_z;
+    bundle_adjustment_->set_diff_z(100.0);
+  }
+  else if(diff_z >= 0.2)
+  {
+    bundle_adjustment_->set_z_flag(false);
+    bundle_adjustment_->set_diff_z(diff_z); // diff_z 参与加权
+  }
+  else
+  {
+    bundle_adjustment_->set_z_flag(true);
+    bundle_adjustment_->set_diff_z(diff_z);
   }
 
   // 跟踪不足的话，下面函数会报：Lost XX Features
@@ -386,7 +405,8 @@ UpdateResult FrameHandlerMono::processFrame()
       }
 
       // TODO (xie chen): 包含 Seed 的跟踪，从多帧中筛选信息量最大的一帧
-      greedy_select();
+      if(newFrame()->bundleId() - init_kf_bundle_id_ > 10)
+        greedy_select();
 
       std::cout << "update " << keyframe_candidates_.size() << " new keyframes" << std::endl;
     }
@@ -546,7 +566,6 @@ void FrameHandlerMono::greedy_select()
   if(keyframe_candidates_.size() == 1)
     return;
 
-  // TEST ***
   double max_score = -1.0;
   size_t max_score_id = -1;
   for(size_t i=0; i<keyframe_candidates_.size(); ++i)
